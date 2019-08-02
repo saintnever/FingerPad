@@ -19,7 +19,7 @@ class SerialReader(threading.Thread):
         self.framestart = 0
         port = serport
         # self.s = serial.Serial(port, 9600, timeout=1, rtscts=True, dsrdtr=True)
-        self.s = serial.Serial(port, 115200, timeout = 1, rtscts=False, dsrdtr=False)
+        self.s = serial.Serial(port, 460800, timeout = 0.1, rtscts=False, dsrdtr=False)
         if not self.s.isOpen():
             self.s.open()
         print("connected: ", self.s)
@@ -45,13 +45,13 @@ class SerialReader(threading.Thread):
                         # read frame
                         frame = self.s.read(n)
                         # calculate and compare CRC
-                        crc_read = self.s.read(2)
+                        #crc_read = self.s.read(2)
                         #print('0 is {0:x}, 1 is {1:x}'.format(crc_read[0], crc_read[1]))
-                        crc_r = ((crc_read[1] << 8) & 0xFF00) + crc_read[0]
-                        crc_cal = self.CRC(frame,n)
-                        if crc_r == crc_cal:
-                            cnt += 1
-                            print(cnt)
+                        #crc_r = ((crc_read[1] << 8) & 0xFF00) + crc_read[0]
+                        #crc_cal = self.CRC(frame,n)
+                        #if crc_r == crc_cal:
+                        cnt += 1
+                        print(cnt)
                         # print('read crc is {0:x}, cal crc is {1:x}'.format(crc_r, crc_cal))
 
                     # frame = self.s.read(2*832+30)

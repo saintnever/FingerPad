@@ -6,7 +6,7 @@ import math
 from adafruit_bus_device.i2c_device import I2CDevice
 
 debug = 0
-uart = busio.UART(board.TX, board.RX, baudrate=115200)
+uart = busio.UART(board.TX, board.RX, baudrate=460800)
 i2c = busio.I2C(board.SCL, board.SDA, frequency=400000)
 print('SCL is {}, SDA is {}, UART TX is {}, RX is {}'.format(board.SCL, board.SDA, board.TX, board.RX))
 
@@ -535,7 +535,7 @@ if __name__ == '__main__':
     # addr = sensor.getReg(0x240F)
     # print('device address is 0x{0:x}, old read is 0x{1:x}'.format(addr, sensor.getReg(0x240F)))
     # print(sensor.kVdd)
-    error = sensor.setRefreshRate(0x02)
+    error = sensor.setRefreshRate(0x04)
     # print(error)
     error = sensor.setSubpageMode(True)
     # sensor.i2cClock(1000000)
@@ -585,16 +585,16 @@ if __name__ == '__main__':
             uart.write(values)
             crct = 0
             i = 0
-            while i < num:
-                crct = (crct + values[i]) & 0xFFFF
-                i += 1
+            #while i < num:
+            #    crct = (crct + values[i]) & 0xFFFF
+            #    i += 1
             #print('{0:x}'.format(crct))
-            crc[0] = crct & 0xFF
-            crc[1] = crct >> 8
-            uart.write(crc)
+            #crc[0] = crct & 0xFF
+            #crc[1] = crct >> 8
+            #uart.write(crc)
             # uart.write(CR)
         t1 = time.monotonic()
-        syncdelay = 0.5 - (t1 - now)
+        syncdelay = 0.125 - (t1 - now)
         if syncdelay > 0:
             time.sleep(syncdelay)
         # print(str(subpage) + ':' + ','.join('{:x}'.format(x) for x in values))
