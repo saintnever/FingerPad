@@ -414,7 +414,7 @@ class MLX90640:
             if (error == -1):
                 return error
             #Read 832 pixels
-            # subpage = self.getReg(0x8000) & 0x0001
+            subpage = self.getReg(0x8000) & 0x0001
             # if subpage == 1:
             self.getReg_raw(0x0400, values, 832)
             statusReg = self.getReg(0x8000)
@@ -423,16 +423,12 @@ class MLX90640:
             cnt += 1
         if cnt > 4:
             return - 8
-        else:
-            # if (statusReg & 0x0001) == 0:
-                self.assemble(values, frame_data)
-        controlReg = self.getReg(0x800D)
-        frame_data[-2] = controlReg
-        frame_data[-1] = statusReg & 0x0001
         t2 = time.monotonic()
         if debug:
             print('in getFrame, initial wait is {}, actual read time is {}, total time is {}'.format(t1 - now, t2 - t1, t2 - now))
-            print('control reg is 0x{0:x}, statusReg is 0x{1:x}'.format(frame_data[-2], frame_data[-1]))
+            # print('control reg is 0x{0:x}, statusReg is 0x{1:x}'.format(frame_data[-2], frame_data[-1]))
+        return statusReg & 0x0001
+
         # return frame_data
 
     def CalculateTo(self, frameData, result):
@@ -539,28 +535,22 @@ if __name__ == '__main__':
     values = bytearray(832* 2)
     frame_data = [0xFFFF for _ in range(834)]
     frameTo = [0] * 768
+    psubpage = 0
     while True:
         now = time.monotonic()
-        for i in range(2):
-            sensor.getFrameDate(values, frame_data)
+        subpage = sensor.getFrameDate(values, frame_data)
+        if subpage != psubpage:
+            sensor.assemble(values, frame_data)
+            frame_data[-2] = sensor.getReg(0x800D)
+            frame_data[-1] = subpage
+            psubpage = subpage
             t1 = time.monotonic()
-            sensor.CalculateTo(frame_data, frameTo)
-            t2 = time.monotonic()
-            # for i in range(768):
-        # te = time.monotonic()
-        if debug:
-            print('total time is  {}, getFrame time is {}, calculate Frame time is {}'.format(t2-now, t1-now, t2-t1))
-            print('current frame is calcualted temperatuer is {}'.format(frameTo))
-            
-        else:
-            # print(frameTo, len(frameTo))
-            print(','.join('{:.2f}'.format(x) for x in frameTo))
-            # print(frame, frameTo)
-            # vdd = getVDD()
-            # Ta = getTa(vdd, 25)
-            # tr = Ta - TA_SHIFT
-            # print(frame, len(frame))
-        
-        # print(getReg(0x2407))
-        # print(mlx.getReg(0x2407))
+            if subpage == 0:
+                sensor.CalculateTo(frame_data, frameTo)
+                t2 = time.monotonic()
+                if debug:
+                    print('total time is  {}, getFrame time is {}, calculate Frame time is {}'.format(t2-now, t1-now, t2-t1))
+                    print(','.join('{:.2f}'.format(x) for x in frameTo))
 
+            
+    
