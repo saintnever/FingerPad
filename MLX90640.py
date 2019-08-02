@@ -1,18 +1,7 @@
 import time
-import board
-from digitalio import DigitalInOut, Direction, Pull
-import busio
 import math
-from adafruit_bus_device.i2c_device import I2CDevice
-
-debug = 0
-uart = busio.UART(board.TX, board.RX, baudrate=115200)
-i2c = busio.I2C(board.SCL, board.SDA, frequency=400000)
-print('SCL is {}, SDA is {}, UART TX is {}, RX is {}'.format(board.SCL, board.SDA, board.TX, board.RX))
-
 class MLX90640:
     def __init__(self):
-        self.device = I2CDevice(i2c, 0x33)
         self.eeData = self.getReg(0x2400, 832)
         self.kVdd, self.vdd25 = self.ExtractVDDParameters()
         self.KvPTAT,self.KtPTAT, self.vPTAT25, self.alphaPTAT = self.ExtractPTATParameters()
@@ -32,68 +21,6 @@ class MLX90640:
         self.TA_SHIFT = 8
         # self.brokenPixels[5]
         # self.outlierPixels[5]  
-
-    def getRego(self, addr, num=1):
-        temp = bytearray(2)
-        out = [0xFFFF for _ in range(num)]
-        with self.device:
-            i = 0
-            while i < num:
-                self.device.write_then_readinto(bytes([(addr + i) >> 8, (addr + i) & 0xFF]), temp, stop=False)
-                # self.device.readinto(temp)
-                out[i] = (temp[0]<<8) + temp[1]
-                i = i + 1
-        if num == 1:
-            return out[0]
-        else:
-            return out
-
-    def getReg(self, addr, num=1):
-        ts = time.monotonic()
-        temp = bytearray(num * 2)
-        out = [0xFFFF for _ in range(num)]
-        t1 = time.monotonic()
-        with self.device:
-            self.device.write_then_readinto(bytes([addr >> 8, addr & 0xFF]), temp, stop=False)
-        t2 = time.monotonic()
-        for i in range(num):
-            out[i] = (temp[2 * i] << 8) + temp[2 * i + 1]
-        t3 = time.monotonic()
-        if num > 700:
-            print('getReg time, init {}, actual read {}, assemble {}'.format(t1-ts, t2-t1, t3-t2))
-        if num == 1:
-            return out[0]
-        else:
-            return out
-
-    def getReg_raw(self, addr, values, num=1):
-        with self.device:
-            self.device.write_then_readinto(bytes([addr >> 8, addr & 0xFF]), values, stop=False)
-    
-    def assemble(self, values, out, num):
-        # num = int(len(values)/2)
-        # out = [0xFFFF for _ in range(num)]
-        for i in range(num):
-            out[i] = (values[2 * i] << 8) + values[2 * i + 1]
-        # return out
-
-    def setReg(self, addr, value, num=1):
-        if num == 1:
-            value = [value]
-        elif len(value) != num:
-            return -1
-        with self.device:
-            i = 0
-            while i < num:
-                self.device.write(bytes([(addr + i) >> 8, (addr + i) & 0xFF, value[i] >> 8, value[i] & 0xFF]), stop=False)
-                # device.write(bytes([value[i] >> 8, value[i] & 0xFF]), stop=False)
-                i = i + 1
-        return 0
-
-    def i2cClock(self, freq):
-        i2c.deinit()
-        i2c_hf = busio.I2C(board.SCL, board.SDA, frequency=freq)
-        self.device = I2CDevice(i2c_hf, 0x33)
 
     def ExtractVDDParameters(self):
         kVdd = self.eeData[51]
@@ -380,58 +307,6 @@ class MLX90640:
         ta = ta / self.KtPTAT + 25        
         return ta
 
-    def setRefreshRate(self, refreshRate):
-        value = (refreshRate & 0x07) << 7
-        controlReg = self.getReg(0x800D)
-        value = (controlReg & 0xFC7F) | value
-        error = self.setReg(0x800D, value)
-        # print('Set refresh rate from 0x{0:x} to 0x{1:x}'.format((controlReg>>7)&0x07, self.getReg(0x800D)))
-        return error
-
-    def setSubpageMode(self, mode=True):
-        controlReg = self.getReg(0x800D)
-        if mode:
-            value = controlReg | 0x0001
-        else:
-            value = controlReg & 0xFFFE
-        error = self.setReg(0x800D, value)
-        # print('Set subpage mode from 0x{0:x} to 0x{1:x}'.format(controlReg&0x0001, self.getReg(0x800D)&0x0001))
-        return error
-
-    def getFrameDate(self, values):
-        dataReady = 1
-        controlReg = statusReg = error = 1
-        cnt = 0
-        #  Wait for new data to be available
-        dataReady = 0
-        now = time.monotonic()
-        while dataReady == 0:
-            statusReg = self.getReg(0x8000)
-            dataReady = statusReg & 0x0008
-        t1 = time.monotonic()
-        while dataReady != 0 and cnt < 5:
-            # Set bits 4 and 5: Start measurement and enable overwrite
-            error = self.setReg(0x8000, 0x0030)
-            if (error == -1):
-                return error
-            #Read 832 pixels
-            subpage = self.getReg(0x8000) & 0x0001
-            # if subpage == 1:
-            self.getReg_raw(0x0400, values, 832)
-            statusReg = self.getReg(0x8000)
-            dataReady = statusReg & 0x0008
-            # print('0x{0:x}, dataReady is {1:x}'.format(statusReg, dataReady))
-            cnt += 1
-        if cnt > 4:
-            return - 8
-        t2 = time.monotonic()
-        if debug:
-            print('in getFrame, initial wait is {}, actual read time is {}, total time is {}'.format(t1 - now, t2 - t1, t2 - now))
-            # print('control reg is 0x{0:x}, statusReg is 0x{1:x}'.format(frame_data[-2], frame_data[-1]))
-        return self.getReg(0x800D), statusReg & 0x0001
-
-        # return frame_data
-
     def CalculateTo(self, frameData, result):
         # try:
         #     if len(frameData) != 834:
@@ -527,91 +402,3 @@ class MLX90640:
         # t1 = time.monotonic()
         # print('calculateTO {}'.format(t1-t0))
         # return result
-
-if __name__ == '__main__':
-    sensor = MLX90640()
-    print('eeData',sensor.eeData)
-    # print(','.join('{:x}'.format(x) for x in sensor.eeData))
-    # addr = sensor.getReg(0x240F)
-    # print('device address is 0x{0:x}, old read is 0x{1:x}'.format(addr, sensor.getReg(0x240F)))
-    # print(sensor.kVdd)
-    error = sensor.setRefreshRate(0x02)
-    # print(error)
-    error = sensor.setSubpageMode(True)
-    # sensor.i2cClock(1000000)
-    # print(error)
-    # sensor.i2cClock(1000000)
-    # led = DigitalInOut(board.P0_13)
-    # led.direction = Direction.OUTPUT
-    num = 832 * 2 + 3
-    values = bytearray(num)
-    header = bytearray(2)
-    length = bytearray(2)
-    crc = bytearray(2)
-    length[0] = num & 0xFF
-    length[1] = num >> 8
-    header[0] = 0x5a
-    header[1] = 0x5a
-    
-    # CR = bytearray(1)
-    # CR[0] = 13
-    frame_data = [0xFFFF for _ in range(832)]
-    # frameTo = [0] * 768
-    psubpage = 0
-    n = 10
-    # throwaway frames duing sync
-    while n > 0:
-        now = time.monotonic()
-        controlReg, subpage = sensor.getFrameDate(values)
-        print(time.monotonic() - now)
-        # time.sleep(0.125-(time.monotonic()-now))
-        n -= 1
-    # uart = busio.UART
-    while True:
-        now = time.monotonic()
-        controlReg, subpage = sensor.getFrameDate(values)
-        # controlReg = 0x5a5a
-        values[-3] = controlReg >> 8
-        values[-2] = controlReg & 0xFF
-        values[-1] = subpage
-        # if subpage == 1:
-        #     sensor.assemble(values, frame_data, 832)
-            # frame_data[-2] = controlReg
-            # frame_data[-1] = subpage
-            # sensor.CalculateTo(frame_data, frameTo)
-        if subpage == 1:
-            uart.write(header)
-            uart.write(length)
-            uart.write(values)
-            crct = 0
-            i = 0
-            while i < num:
-                crct = (crct + values[i]) & 0xFFFF
-                i += 1
-            #print('{0:x}'.format(crct))
-            crc[0] = crct & 0xFF
-            crc[1] = crct >> 8
-            uart.write(crc)
-            # uart.write(CR)
-        t1 = time.monotonic()
-        syncdelay = 0.5 - (t1 - now)
-        if syncdelay > 0:
-            time.sleep(syncdelay)
-        # print(str(subpage) + ':' + ','.join('{:x}'.format(x) for x in values))
-        # print(subpage, frame_data)
-        print(subpage, time.monotonic() - now, t1-now)
-        # if subpage != psubpage:
-        #     sensor.assemble(values, frame_data)
-        #     frame_data[-2] = sensor.getReg(0x800D)
-        #     frame_data[-1] = subpage
-            # psubpage = subpage
-            # t1 = time.monotonic()
-            # if subpage == 0:
-            #     sensor.CalculateTo(frame_data, frameTo)
-            #     t2 = time.monotonic()
-            #     if debug:
-            #         print('total time is  {}, getFrame time is {}, calculate Frame time is {}'.format(t2-now, t1-now, t2-t1))
-            #         print(','.join('{:.2f}'.format(x) for x in frameTo))
-
-            
-    
