@@ -5,7 +5,7 @@ import busio
 import math
 from adafruit_bus_device.i2c_device import I2CDevice
 
-debug = 1
+debug = 0
 i2c = busio.I2C(board.SCL, board.SDA, frequency=400000)
 print('SCL is {}, SDA is {}'.format(board.SCL, board.SDA))
 
@@ -69,8 +69,8 @@ class MLX90640:
         with self.device:
             self.device.write_then_readinto(bytes([addr >> 8, addr & 0xFF]), values, stop=False)
     
-    def assemble(self, values, out):
-        num = int(len(values)/2)
+    def assemble(self, values, out, num):
+        # num = int(len(values)/2)
         # out = [0xFFFF for _ in range(num)]
         for i in range(num):
             out[i] = (values[2 * i] << 8) + values[2 * i + 1]
@@ -397,7 +397,7 @@ class MLX90640:
         # print('Set subpage mode from 0x{0:x} to 0x{1:x}'.format(controlReg&0x0001, self.getReg(0x800D)&0x0001))
         return error
 
-    def getFrameDate(self, values, frame_data):
+    def getFrameDate(self, values):
         dataReady = 1
         controlReg = statusReg = error = 1
         cnt = 0
@@ -427,16 +427,16 @@ class MLX90640:
         if debug:
             print('in getFrame, initial wait is {}, actual read time is {}, total time is {}'.format(t1 - now, t2 - t1, t2 - now))
             # print('control reg is 0x{0:x}, statusReg is 0x{1:x}'.format(frame_data[-2], frame_data[-1]))
-        return statusReg & 0x0001
+        return self.getReg(0x800D), statusReg & 0x0001
 
         # return frame_data
 
     def CalculateTo(self, frameData, result):
-        try:
-            if len(frameData) != 834:
-                return - 1
-        except:
-            return -1
+        # try:
+        #     if len(frameData) != 834:
+        #         return - 1
+        # except:
+        #     return -1
         # if frameData < 0:
         #     return -1
         irDataCP = [0]* 2
@@ -478,14 +478,21 @@ class MLX90640:
             irDataCP[1] = irDataCP[1] - (self.cpOffset[1] + self.ilChessC[0]) * (1 + self.cpKta * (ta - 25)) * (1 + self.cpKv * (vdd - 3.3))    
         # print('subpage {}, gain {}, cpKta {}, cpkv {}, mode{}, modeEE {}, vdd{}'.format(subPage, gain, self.cpKta, self.cpKv, mode, self.calibrationModeEE, vdd))
 
+        t0 = time.monotonic()
         for pixelNumber in range(768):
+            t0i = time.monotonic()
             ilPattern = int(pixelNumber / 32 - (pixelNumber / 64) * 2)
             chessPattern = ilPattern ^ int(pixelNumber - (pixelNumber/2)*2) 
             conversionPattern = ((pixelNumber + 2) / 4 - (pixelNumber + 3) / 4 + (pixelNumber + 1) / 4 - pixelNumber / 4) * (1 - 2 * ilPattern)
             pattern = ilPattern if mode == 0 else chessPattern
             # if debug:
             #     print(pattern, ilPattern, chessPattern, subPage)
-            if(pattern == frameData[833]):    
+            # t1i = time.monotonic()
+            # print(t1i - t0i)
+            if(pattern == subPage):
+            # if True:
+                # t0ii = time.monotonic()
+
                 irData = frameData[pixelNumber] 
                 if(irData > 32767):
                     irData = irData - 65536
@@ -499,12 +506,10 @@ class MLX90640:
                 irData = irData - self.tgc * irDataCP[subPage]
                 
                 alphaCompensated = (self.alpha[pixelNumber] - self.tgc * self.cpAlpha[subPage])*(1 + self.KsTa * (ta - 25.0))
-                
                 Sx = pow(alphaCompensated, 3.0) * (irData + alphaCompensated * taTr)
                 Sx = math.sqrt(math.sqrt(Sx)) * self.ksTo[1]
                 
                 To = math.sqrt(math.sqrt(irData/(alphaCompensated * (1 - self.ksTo[1] * 273.15) + Sx) + taTr)) - 273.15
-                        
                 if(To < self.ct[1]):
                     ranget = 0
                 elif(To < self.ct[2]):
@@ -515,42 +520,72 @@ class MLX90640:
                     ranget = 3              
                 
                 To = math.sqrt(math.sqrt(irData / (alphaCompensated * alphaCorrR[ranget] * (1 + self.ksTo[ranget] * (To - self.ct[ranget]))) + taTr)) - 273.15
-                
+                # t1ii = time.monotonic()
+                # print(t1ii - t0ii)
                 result[pixelNumber] = To
+        # t1 = time.monotonic()
+        # print('calculateTO {}'.format(t1-t0))
         # return result
 
 if __name__ == '__main__':
     sensor = MLX90640()
+    print(sensor.eeData)
+    # print(','.join('{:x}'.format(x) for x in sensor.eeData))
     # addr = sensor.getReg(0x240F)
     # print('device address is 0x{0:x}, old read is 0x{1:x}'.format(addr, sensor.getReg(0x240F)))
     # print(sensor.kVdd)
-    error = sensor.setRefreshRate(0x04)
+    error = sensor.setRefreshRate(0x03)
     # print(error)
     error = sensor.setSubpageMode(True)
-    sensor.i2cClock(1000000)
+    # sensor.i2cClock(1000000)
     # print(error)
     # sensor.i2cClock(1000000)
     # led = DigitalInOut(board.P0_13)
     # led.direction = Direction.OUTPUT
     values = bytearray(832* 2)
-    frame_data = [0xFFFF for _ in range(834)]
-    frameTo = [0] * 768
+    frame_data = [0xFFFF for _ in range(832)]
+    # frameTo = [0] * 768
     psubpage = 0
+    n = 10
+    # throwaway frames duing sync
+    while n > 0:
+        now = time.monotonic()
+        controlReg, subpage = sensor.getFrameDate(values)
+        print(time.monotonic() - now)
+        # time.sleep(0.125-(time.monotonic()-now))
+        n -= 1
+    # uart = busio.UART
     while True:
         now = time.monotonic()
-        subpage = sensor.getFrameDate(values, frame_data)
-        if subpage != psubpage:
-            sensor.assemble(values, frame_data)
-            frame_data[-2] = sensor.getReg(0x800D)
-            frame_data[-1] = subpage
-            psubpage = subpage
-            t1 = time.monotonic()
-            if subpage == 0:
-                sensor.CalculateTo(frame_data, frameTo)
-                t2 = time.monotonic()
-                if debug:
-                    print('total time is  {}, getFrame time is {}, calculate Frame time is {}'.format(t2-now, t1-now, t2-t1))
-                    print(','.join('{:.2f}'.format(x) for x in frameTo))
+        controlReg, subpage = sensor.getFrameDate(values)
+        if subpage == 1:
+            sensor.assemble(values, frame_data, 832)
+            # frame_data[-2] = controlReg
+            # frame_data[-1] = subpage
+            # sensor.CalculateTo(frame_data, frameTo)
+        elif subpage == 0:
+            print(frame_data)
+        t1 = time.monotonic()
+        syncdelay = 0.25 - (t1 - now)
+        if syncdelay > 0:
+            time.sleep(syncdelay)
+
+        # t1 = time.monotonic()
+        # print(str(subpage) + ':' + ','.join('{:x}'.format(x) for x in values))
+        # print(subpage, frame_data)
+        # print(subpage, time.monotonic() - now, t1-now)
+        # if subpage != psubpage:
+        #     sensor.assemble(values, frame_data)
+        #     frame_data[-2] = sensor.getReg(0x800D)
+        #     frame_data[-1] = subpage
+            # psubpage = subpage
+            # t1 = time.monotonic()
+            # if subpage == 0:
+            #     sensor.CalculateTo(frame_data, frameTo)
+            #     t2 = time.monotonic()
+            #     if debug:
+            #         print('total time is  {}, getFrame time is {}, calculate Frame time is {}'.format(t2-now, t1-now, t2-t1))
+            #         print(','.join('{:.2f}'.format(x) for x in frameTo))
 
             
     
