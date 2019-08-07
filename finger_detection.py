@@ -10,7 +10,7 @@ import numpy as np
 import time
 #import MLX90640
 import cv2 as cv
-
+from collections import deque
 
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
@@ -75,6 +75,8 @@ class SerialReader(threading.Thread):
 
 def colorscale(datas, minc, maxc):
     data_scales = list()
+    # maxc = np.max(datas)
+    # minc = np.min(datas)
     for data in datas:
         data_scale = int(256 * (data - minc) / (maxc - minc))
         if data_scale < 0:
@@ -124,19 +126,29 @@ data_reader0.start()
 
 if __name__ == '__main__':
     try:
-        fig, (ax0, ax1) = plt.subplots(1, 2)
+        fig, ([ax0, ax1], [ax2, ax3]) = plt.subplots(2, 2)
         # im1 = ax1.imshow(np.random.uniform(low=22, high=32, size=(20, 36)), vmin=20, vmax=36, cmap='jet')
         #                  # interpolation='lanczos')
         # im0 = ax0.imshow(np.random.uniform(low=22, high=32, size=(20, 36)), vmin=20, vmax=36, cmap='jet')
         #                  # interpolation='lanczos')
         im0 = ax0.imshow(np.random.uniform(low=20, high=35, size=(24, 32)), cmap='jet')
         im1 = ax1.imshow(np.random.uniform(low=20, high=35, size=(24, 32)), cmap='jet')
+        im2 = ax2.imshow(np.random.uniform(low=20, high=35, size=(24, 32)), cmap='jet')
+        im3 = ax3.imshow(np.random.uniform(low=20, high=35, size=(24, 32)), cmap='jet')
         plt.tight_layout()
         plt.ion()
+        fgbg = cv.createBackgroundSubtractorMOG2(history=5, detectShadows=False)
+        mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
+        cnt = 0
+        # mlen = 10
+        # bg_queue = deque(maxlen=mlen)
         while True:
+            # if cnt % 20 == 0:
+            #     mask = np.array([[255] * 32 for _ in range(24)], np.uint8)
+            # cnt += 1
             time0, temp0 = q0.get()
             # convert to gray image
-            gray0 = colorscale(temp0, 20, 35)
+            gray0 = colorscale(temp0, 22, 30)
             # time1, temp1 = q1.get()
             # print(time0, time1, time0-time1)
             # data0 = gray0.reshape(24, 32)
@@ -155,13 +167,35 @@ if __name__ == '__main__':
             # thinning
             # gray = cv.cvtColor(data0, cv.COLOR_BGR2GRAY)
             blur = cv.GaussianBlur(img0, (5, 5), 0)
-            ret, th = cv.threshold(blur, 70, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-            # kernel = np.ones((2, 2), np.uint8)
-            # th = cv.erode(th, kernel)
-            indextip = trackFingertip(th)
-            if indextip is not None:
-                blur[indextip[1], indextip[0]] = 125
             im0.set_array(blur)
+            ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE,(3,3))
+            opening = cv.morphologyEx(th, cv.MORPH_OPEN, kernel)
+            GRA = cv.morphologyEx(opening, cv.MORPH_GRADIENT, kernel)
+            # GRA_o = cv.morphologyEx(GRA, cv.MORPH_OPEN, kernel)
+            # im1.set_array(opening)
+            # print(th.shape, mask.shape)
+            fgmask = fgbg.apply(opening)
+            fgmask = cv.morphologyEx(fgmask, cv.MORPH_OPEN, kernel)
+            # print(np.max(mmm))
+            im1.set_array(fgmask)
+
+            # print(mask)
+            # bg_queue.append(th)
+            # if len(list(bg_queue)) == mlen:
+            #     mask = np.array([[255] * 32 for _ in range(24)], np.uint8)
+            #     for q in bg_queue:
+            #         cv.bitwise_and(q, mask, dst=mask)
+            #     bg_queue.popleft()
+            # # cv.bitwise_and(th, mask, dst=mask)
+            # mask_inv = cv.bitwise_not(mask)
+            # cv.bitwise_and(th, mask_inv, dst=th)
+            # # kernel = np.ones((2, 2), np.uint8)
+            # # th = cv.erode(th, kernel)
+            # indextip = trackFingertip(th)
+            # if indextip is not None:
+            #     blur[indextip[1], indextip[0]] = 125
+            im2.set_array(th)
 
             # skeleton
             # kernel = np.ones((3, 3), np.uint8)
@@ -171,7 +205,8 @@ if __name__ == '__main__':
             # kernel = np.array([[0, -1, 0], [0, 1, -1], [1, 1, 1]], np.uint8)
             # img_output = np.array([[0] * 32 for _ in range(24)], np.uint8)
             # erosion = cv.morphologyEx(th, cv.MORPH_HITMISS, kernel)
-            im1.set_array(th)
+            # mmm[mmm == 1] = 255
+            im3.set_array(GRA)
             plt.pause(0.001)
 
         # # plt.ioff()
