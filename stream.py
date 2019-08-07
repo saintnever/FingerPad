@@ -15,8 +15,8 @@ class SerialReader(threading.Thread):
         threading.Thread.__init__(self)
         self.stopped = stop_event
         self.signal = sig
-        self.frame = list()
-        self.framestart = 0
+        self.frame = 0
+        self.n = 1667
         port = serport
         # self.s = serial.Serial(port, 9600, timeout=1, rtscts=True, dsrdtr=True)
         self.s = serial.Serial(port, 460800, timeout = 0.1, rtscts=False, dsrdtr=False)
@@ -40,10 +40,12 @@ class SerialReader(threading.Thread):
                     d = ord(self.s.read())
                     if d == 0x5a:
                         # get the frame length
-                        n = self.s.read(2)
-                        n = ((n[1] << 8) & 0xFF00) + n[0]
+                        #n = self.s.read(2)
+                        #n = ((n[1] << 8) & 0xFF00) + n[0]
+                        #print(n)
                         # read frame
-                        frame = self.s.read(n)
+                        self.frame = self.s.read(self.n)
+                        self.signal.put(self.frame)
                         # calculate and compare CRC
                         #crc_read = self.s.read(2)
                         #print('0 is {0:x}, 1 is {1:x}'.format(crc_read[0], crc_read[1]))
@@ -53,7 +55,9 @@ class SerialReader(threading.Thread):
                         cnt += 1
                         print(cnt)
                         # print('read crc is {0:x}, cal crc is {1:x}'.format(crc_r, crc_cal))
-
+                if d == 0xa5:
+                    d = ord(self.s.read())
+                    if d == 0xa5:
                     # frame = self.s.read(2*832+30)
                    
                     #print([ord(x) for x in frame])
