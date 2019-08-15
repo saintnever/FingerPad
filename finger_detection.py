@@ -11,6 +11,9 @@ import time
 #import MLX90640
 import cv2 as cv
 from collections import deque
+import math
+import colorsys
+re_size = (24*15, 32*15, 3)
 
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
@@ -96,13 +99,13 @@ def find_furthest(contour, center):
         # if x == 0 or x == 31 or y == 0 or y == 23:
         #     continue
         d = (x-center[0])**2 + (y-center[1])**2
-        if d > dmax:
+        if d > dmax and x * y != 0 and x!=re_size[0]-1 and y !=re_size[1]-1:
             dmax = d
             index = [x, y]
     return index
 
 
-def trackFingertip(img):
+def trackFingertip(img, tip_prev):
     contours, hierarchy = cv.findContours(img, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
     areas = [cv.contourArea(c) for c in contours]
     if areas:
@@ -112,17 +115,46 @@ def trackFingertip(img):
         x, y, w, h = cv.boundingRect(cnt)
         center = [x + w / 2, y + h / 2]
         ftip = find_furthest(contours[max_index], center)
+        # dist = math.sqrt((ftip[0] - tip_prev[0]) ** 2 + (ftip[1] - tip_prev[1]) ** 2)
+        # print(dist)
+        # if dist > 20 and (tip_prev[0] != -1 and tip_prev[1] != -1):
+        #     return tip_prev
     else:
         ftip = None
     return ftip
 
+def map_def(x, in_min, in_max, out_min, out_max):
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+    
+def constrain(val, min_val, max_val):
+    max_array = np.empty(val.shape)
+    max_array.fill(max_val)
+    min_array = np.empty(val.shape)
+    min_array.fill(min_val)
+    return np.minimum(max_array, np.maximum(min_array, val))
+
+def image_filter(img):
+    fimg = np.array(img, np.float)
+    t_max = np.amax(fimg)
+    t_min = np.amin(fimg)
+    index_blue = (fimg <= (t_min+1))
+    index = (fimg > (t_min+1))
+    fimg[index] = constrain(map_def(fimg[index], t_min, t_max, 0.5, 1.0), 0.5, 1.0)
+    fimg[fimg < 0] = 0
+    fimg[index_blue] = 0.667
+    rgbimg = np.zeros((img0.shape[0], img0.shape[1], 3), np.float32)
+    for i in range(fimg.shape[0]):
+        for j in range(fimg.shape[1]):
+            rgbimg[i][j] = colorsys.hsv_to_rgb(fimg[i][j], 1.0, 1.0)
+    return rgbimg
+
 q0 = queue.Queue()
-# q1 = queue.Queue()
+q1 = queue.Queue()
 stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM13')
+data_reader0 = SerialReader(stop_event, q0, 'COM15')
 data_reader0.start()
-# data_reader1 = SerialReader(stop_event, q1, 'COM13')
-# data_reader1.start()
+data_reader1 = SerialReader(stop_event, q1, 'COM16')
+data_reader1.start()
 
 if __name__ == '__main__':
     try:
@@ -131,10 +163,11 @@ if __name__ == '__main__':
         #                  # interpolation='lanczos')
         # im0 = ax0.imshow(np.random.uniform(low=22, high=32, size=(20, 36)), vmin=20, vmax=36, cmap='jet')
         #                  # interpolation='lanczos')
-        im0 = ax0.imshow(np.random.uniform(low=20, high=35, size=(24, 32)), cmap='jet')
-        im1 = ax1.imshow(np.random.uniform(low=20, high=35, size=(24, 32)), cmap='jet')
-        im2 = ax2.imshow(np.random.uniform(low=20, high=35, size=(24, 32)), cmap='jet')
-        im3 = ax3.imshow(np.random.uniform(low=20, high=35, size=(24, 32)), cmap='jet')
+        re_size1 = (24*15, 32*15)
+        im0 = ax0.imshow(np.random.uniform(low=20, high=38, size=re_size))
+        im1 = ax1.imshow(np.random.uniform(low=20, high=38, size=re_size))
+        im2 = ax2.imshow(np.random.uniform(low=20, high=38, size=re_size1))
+        im3 = ax3.imshow(np.random.uniform(low=20, high=38, size=re_size))
         plt.tight_layout()
         plt.ion()
         fgbg = cv.createBackgroundSubtractorMOG2(history=5, detectShadows=False)
@@ -142,43 +175,53 @@ if __name__ == '__main__':
         cnt = 0
         # mlen = 10
         # bg_queue = deque(maxlen=mlen)
+        indextip_prev = [-1, -1]
+        # timg = cv.imread('fingertip.jpg')
+        # print(np.shape(timg))
         while True:
             # if cnt % 20 == 0:
             #     mask = np.array([[255] * 32 for _ in range(24)], np.uint8)
             # cnt += 1
             time0, temp0 = q0.get()
-            # convert to gray image
-            gray0 = colorscale(temp0, 22, 30)
-            # time1, temp1 = q1.get()
-            # print(time0, time1, time0-time1)
-            # data0 = gray0.reshape(24, 32)
-            data0 = [[0] * 32 for _ in range(24)]
-            # data1 = [[0] * 32 for _ in range(24)]
+            time1, temp1 = q1.get()
+            img0 = np.array([[0] * 32 for _ in range(24)], np.uint8)
+            img1 = np.array([[0] * 32 for _ in range(24)], np.uint8)
             for i, x in enumerate(temp0):
                 row = i // 32
                 col = 31 - i % 32
-                data0[int(row)][int(col)] = x
-                # data1[int(row)][int(col)] = temp1[i]
-            img0 = np.array(data0, np.uint8)
+                img0[int(row)][int(col)] = x
+                img1[int(row)][int(col)] = temp1[i]
+            img0 = image_filter(img0)
+            img1 = image_filter(img1)
+            # im0.set_array(rgbimg)
+            # # img_raw = np.array(data0, np.uint8)
+            img0 = cv.resize(img0, re_size1, interpolation=cv.INTER_LINEAR)
+            img1 = cv.resize(img1, re_size1, interpolation=cv.INTER_LINEAR)
             # if np.sum(np.sum(img0, axis=1)) != 0:
             #     np.save('fingertip', img0)
             #     cv.destroyAllWindows()
             #     break
             # thinning
             # gray = cv.cvtColor(data0, cv.COLOR_BGR2GRAY)
-            blur = cv.GaussianBlur(img0, (5, 5), 0)
-            im0.set_array(blur)
-            ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-            kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE,(3,3))
-            opening = cv.morphologyEx(th, cv.MORPH_OPEN, kernel)
-            GRA = cv.morphologyEx(opening, cv.MORPH_GRADIENT, kernel)
+            blur0 = cv.GaussianBlur(img0, (31, 31), 0)
+            blur1 = cv.GaussianBlur(img1, (31, 31), 0)
+            im0.set_array(blur0)
+            im1.set_array(blur1)
+            # thresh = np.max(blur)*0.9
+            # ret, th = cv.threshold(blur, thresh, 255, cv.THRESH_BINARY)
+            # ret, th = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+            # kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (17, 17))
+            # # th_erode = cv.erode(th, kernel) 
+            # opening = cv.morphologyEx(th, cv.MORPH_OPEN, kernel)
+            # th_erode = cv.erode(opening, kernel)   
+            # GRA = cv.morphologyEx(opening, cv.MORPH_GRADIENT, kernel)
             # GRA_o = cv.morphologyEx(GRA, cv.MORPH_OPEN, kernel)
             # im1.set_array(opening)
             # print(th.shape, mask.shape)
-            fgmask = fgbg.apply(opening)
-            fgmask = cv.morphologyEx(fgmask, cv.MORPH_OPEN, kernel)
+            # fgmask = fgbg.apply(opening)
+            # fgmask = cv.morphologyEx(fgmask, cv.MORPH_OPEN, kernel)
             # print(np.max(mmm))
-            im1.set_array(fgmask)
+            # im1.set_array(fgmask)
 
             # print(mask)
             # bg_queue.append(th)
@@ -192,11 +235,10 @@ if __name__ == '__main__':
             # cv.bitwise_and(th, mask_inv, dst=th)
             # # kernel = np.ones((2, 2), np.uint8)
             # # th = cv.erode(th, kernel)
-            # indextip = trackFingertip(th)
-            # if indextip is not None:
-            #     blur[indextip[1], indextip[0]] = 125
-            im2.set_array(th)
-
+        
+            # im1.set_array(th)
+            # th_thinned = thinning.skeletonize(th)
+            # im2.set_array(th_erode)
             # skeleton
             # kernel = np.ones((3, 3), np.uint8)
             #
@@ -204,9 +246,14 @@ if __name__ == '__main__':
             # # hit-or-miss detection of fingertip
             # kernel = np.array([[0, -1, 0], [0, 1, -1], [1, 1, 1]], np.uint8)
             # img_output = np.array([[0] * 32 for _ in range(24)], np.uint8)
-            # erosion = cv.morphologyEx(th, cv.MORPH_HITMISS, kernel)
+            # hitmiss = cv.morphologyEx(th, cv.MORPH_HITMISS, kernel)
             # mmm[mmm == 1] = 255
-            im3.set_array(GRA)
+            # indextip = trackFingertip(th_erode, indextip_prev)
+            # indextip_prev = indextip
+            # if indextip is not None:
+            #     blur0 = cv.circle(blur0,(indextip[0], indextip[1]), 5, (0,0,255), -1)
+            #     # blur[indextip[1], indextip[0]] = 125
+            # im3.set_array(blur0)
             plt.pause(0.001)
 
         # # plt.ioff()
@@ -231,5 +278,5 @@ if __name__ == '__main__':
         stop_event.set()
         data_reader0.clean()
         data_reader0.clean()
-        # data_reader1.join()
-        # data_reader1.join()
+        data_reader1.join()
+        data_reader1.join()
