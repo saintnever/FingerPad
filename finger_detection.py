@@ -410,8 +410,8 @@ q1 = queue.Queue()
 stop_event = threading.Event()
 data_reader0 = SerialReader(stop_event, q0, 'COM16')
 data_reader0.start()
-data_reader1 = SerialReader(stop_event, q1, 'COM18')
-data_reader1.start()
+# data_reader1 = SerialReader(stop_event, q1, 'COM18')
+# data_reader1.start()
 re_size = (24*5, 32*5)
 
 if __name__ == '__main__':
@@ -445,13 +445,30 @@ if __name__ == '__main__':
         cnt1_prev = [0]
         # timg = cv.imread('fingertip.jpg')
         # print(np.shape(timg))
+        cal_cnt = 30
+        temp0_bg = [0] * 768
+        temp1_bg = [0] * 768
         while True:
             # if cnt % 20 == 0:
             #     mask = np.array([[255] * 32 for _ in range(24)], np.uint8)
             # cnt += 1
             time0, temp0 = q0.get()
-            # temp1 = temp0
-            time1, temp1 = q1.get()
+            temp1 = temp0
+            # time1, temp1 = q1.get()
+            # if cal_cnt >= 0:
+            #     temp0_bg += np.array(temp0)
+            #     temp1_bg += np.array(temp1)
+            #     if cal_cnt == 0:
+            #         temp0_bg = temp0_bg / 30
+            #         temp1_bg = temp1_bg / 30
+            #     cal_cnt -= 1
+            #     continue
+            #
+            # temp0 -= temp0_bg
+            # # temp0[temp0 < 0] = 0
+            # temp1 -= temp1_bg
+            # # temp1[temp1 < 0] = 0
+            # temp1 = temp1_bg
             temp0 = colorscale(temp0, np.min(temp0), np.max(temp0))
             temp1 = colorscale(temp1, np.min(temp1), np.max(temp1))
             img0 = np.array([[0] * 32 for _ in range(24)], np.uint8)
@@ -486,34 +503,34 @@ if __name__ == '__main__':
             ret, th1 = cv.threshold(blur1, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
             # th1_erode = cv.erode(th1, kernel)
 
-            contours, hierarchy = cv.findContours(th0, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
-            # blur0 = cv.drawContours(blur0, contours, -1, (0, 255, 0), 3)
-
-            areas = [cv.contourArea(c) for c in contours]
-            if areas:
-                max_index = np.argmax(areas)
-                cnt = contours[max_index]
-                # Create a mask from the largest contour
-                mask = np.zeros(th0.shape)
-                cv.fillPoly(mask, [cnt], 1)
-                # Use mask to crop data from original image
-                th0 = np.multiply(th0, mask)
-            if len(areas) > 1:
-                cnt0_prev = contours[areas.index(np.sort(areas)[-2])]
-            contours, hierarchy = cv.findContours(th1, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
-            # blur0 = cv.drawContours(blur0, contours, -1, (0, 255, 0), 3)
-
-            areas = [cv.contourArea(c) for c in contours]
-            if areas:
-                max_index = np.argmax(areas)
-                cnt = contours[max_index]
-                # Create a mask from the largest contour
-                mask = np.zeros(th1.shape)
-                cv.fillPoly(mask, [cnt], 1)
-                # Use mask to crop data from original image
-                th1 = np.multiply(th1, mask)
-            if len(areas) > 1:
-                cnt1_prev = contours[areas.index(np.sort(areas)[-2])]
+            # contours, hierarchy = cv.findContours(th0, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
+            #
+            # # blur0 = cv.drawContours(blur0, contours, -1, (0, 255, 0), 3)
+            # areas = [cv.contourArea(c) for c in contours]
+            # if areas:
+            #     max_index = np.argmax(areas)
+            #     cnt = contours[max_index]
+            #     # Create a mask from the largest contour
+            #     mask = np.zeros(th0.shape)
+            #     cv.fillPoly(mask, [cnt], 1)
+            #     # Use mask to crop data from original image
+            #     th0 = np.multiply(th0, mask)
+            # if len(areas) > 1:
+            #     cnt0_prev = contours[areas.index(np.sort(areas)[-2])]
+            # contours, hierarchy = cv.findContours(th1, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
+            # # blur0 = cv.drawContours(blur0, contours, -1, (0, 255, 0), 3)
+            #
+            # areas = [cv.contourArea(c) for c in contours]
+            # if areas:
+            #     max_index = np.argmax(areas)
+            #     cnt = contours[max_index]
+            #     # Create a mask from the largest contour
+            #     mask = np.zeros(th1.shape)
+            #     cv.fillPoly(mask, [cnt], 1)
+            #     # Use mask to crop data from original image
+            #     th1 = np.multiply(th1, mask)
+            # if len(areas) > 1:
+            #     cnt1_prev = contours[areas.index(np.sort(areas)[-2])]
             im2.set_array(th0)
             im3.set_array(th1)
 
@@ -545,8 +562,8 @@ if __name__ == '__main__':
                 wedge0_prev = wedge0
                 indextip0 = find_fingertip(wedge0, ep0_ind, re_size, indextip0_prev)
                 # print(cv.pointPolygonTest(cnt0_prev,(indextip0[1], indextip0[0]), False))
-                if len(cnt0_prev) > 1 and cv.pointPolygonTest(cnt0_prev,(indextip0[0], indextip0[1]), False) >= 0:
-                        indextip0 = indextip0_prev
+                # if len(cnt0_prev) > 1 and cv.pointPolygonTest(cnt0_prev,(indextip0[0], indextip0[1]), False) >= 0:
+                #         indextip0 = indextip0_prev
             else:
                 indextip0 = indextip0_prev
 
@@ -562,8 +579,8 @@ if __name__ == '__main__':
                 wedge1 = wristedge(th1, wedge1_prev)
                 wedge1_prev = wedge1
                 indextip1 = find_fingertip(wedge1, ep1_ind, re_size, indextip1_prev)
-                if len(cnt1_prev) > 1 and cv.pointPolygonTest(cnt1_prev, (indextip1[0], indextip1[1]), False) >= 0:
-                    indextip1 = indextip1_prev
+                # if len(cnt1_prev) > 1 and cv.pointPolygonTest(cnt1_prev, (indextip1[0], indextip1[1]), False) >= 0:
+                #     indextip1 = indextip1_prev
             else:
                 indextip1 = indextip1_prev
 
@@ -633,5 +650,5 @@ if __name__ == '__main__':
         stop_event.set()
         data_reader0.clean()
         data_reader0.clean()
-        data_reader1.join()
-        data_reader1.join()
+        # data_reader1.join()
+        # data_reader1.join()
