@@ -85,7 +85,7 @@ def colorscale(datas, minc, maxc):
     # minc = np.min(datas)
     for data in datas:
         data_scale = int(256 * (data - minc) / (maxc - minc))
-        if data_scale < 0:
+        if data_scale < 0.5*256:
             data_scale = 0
         elif data_scale > 255:
             data_scale = 255
@@ -159,23 +159,37 @@ def onedge(point, fsize, dis):
     return False
 
 def wristedge(img, wedge_prev):  # img need to be binary image
-    ratios = [0,0,0,0]
+    ratios = [0] * 8
+    edge_top = img[0]
+    edge_bottom = img[-1]
+    edge_left = np.array([item[0] for item in img])
+    edge_right = np.array([item[-1] for item in img])
+    width = len(edge_left)
+    height = len(edge_top)
+    # print(width, height)
+    qcircum = (width+height)/2
     # ensure counter-clockwise sequence
-    ratios[0] = np.sum(img[0])/len(img[0])
-    ratios[2] = np.sum(img[-1])/len(img[-1])
-    imgT = np.transpose(img)
-    ratios[1] = np.sum(imgT[0])/len(imgT[0])
-    ratios[3] = np.sum(imgT[-1])/len(imgT[-1])
+    ratios[0] = np.sum(edge_top)/width
+    ratios[1] = np.sum(edge_left)/height
+    ratios[2] = np.sum(edge_bottom)/width
+    ratios[3] = np.sum(edge_right)/height
+    ratios[4] = (np.sum(edge_top[0:int(width / 2)]) + np.sum(edge_left[0:int(height / 2)])) / qcircum
+    ratios[5] = (np.sum(edge_left[-int(height / 2):]) + np.sum(edge_bottom[0:int(width / 2)])) / qcircum
+    ratios[6] = (np.sum(edge_bottom[-int(width / 2):]) + np.sum(edge_right[-int(height / 2):])) / qcircum
+    ratios[7] = (np.sum(edge_right[0:int(height / 2)]) + np.sum(edge_top[-int(width / 2):])) / qcircum
+    # ratios[5] = (np.sum(imgT[0][0:int(fsy / 2)]) + np.sum(img[-1][0:int(fsx / 2)])) / fsd
+    # ratios[6] = (np.sum(img[-1][0:int(fsx / 2)]) + np.sum(imgT[-1][0:int(fsy / 2)])) / fsd
+    # ratios[7] = (np.sum(imgT[-1][0:int(fsy / 2)]) + np.sum(img[0][0:int(fsx / 2)])) / fsd
     # ratios_sorted = np.sort(ratios)
-    for i, item in enumerate(ratios):
-        if i == len(ratios)-1:
-            if ratios[i] > 0.4 and ratios[0] > 0.4:
-                return i+4
-        else:
-            if ratios[i] > 0.4 and ratios[i+1] > 0.4:
-                return i+4
+    # for i, item in enumerate(ratios):
+    #     if i == len(ratios)-1:
+    #         if ratios[i] > 0.4 and ratios[0] > 0.4:
+    #             return i+4
+    #     else:
+    #         if ratios[i] > 0.4 and ratios[i+1] > 0.4:
+    #             return i+4
 
-    if np.sum(ratios) < 0.8:
+    if np.sum(ratios) < 1:
         return ratios.index(max(ratios))
     else:
         return wedge_prev
@@ -396,8 +410,8 @@ q1 = queue.Queue()
 stop_event = threading.Event()
 data_reader0 = SerialReader(stop_event, q0, 'COM16')
 data_reader0.start()
-# data_reader1 = SerialReader(stop_event, q1, 'COM17')
-# data_reader1.start()
+data_reader1 = SerialReader(stop_event, q1, 'COM18')
+data_reader1.start()
 re_size = (24*5, 32*5)
 
 if __name__ == '__main__':
@@ -420,13 +434,15 @@ if __name__ == '__main__':
         cnt = 0
         # mlen = 10
         # bg_queue = deque(maxlen=mlen)
-        indextip0 = [-1, -1]
-        indextip1 = [-1, -1]
-        indextip0_prev = [-1, -1]
-        indextip1_prev = [-1, -1]
+        indextip0 = [0, 0]
+        indextip1 = [0, 0]
+        indextip0_prev = [0, 0]
+        indextip1_prev = [0, 0]
         wedge0_prev = -1
         wedge1_prev = -1
         bp_prev = [[0], [0]]
+        cnt0_prev = [0]
+        cnt1_prev = [0]
         # timg = cv.imread('fingertip.jpg')
         # print(np.shape(timg))
         while True:
@@ -434,8 +450,8 @@ if __name__ == '__main__':
             #     mask = np.array([[255] * 32 for _ in range(24)], np.uint8)
             # cnt += 1
             time0, temp0 = q0.get()
-            temp1 = temp0
-            # time1, temp1 = q1.get()
+            # temp1 = temp0
+            time1, temp1 = q1.get()
             temp0 = colorscale(temp0, np.min(temp0), np.max(temp0))
             temp1 = colorscale(temp1, np.min(temp1), np.max(temp1))
             img0 = np.array([[0] * 32 for _ in range(24)], np.uint8)
@@ -449,27 +465,28 @@ if __name__ == '__main__':
             # img1 = image_filter(img1)
             # img0 = constrain(map_def(img0, np.amax(img0), np.amin(img0), 0, 255), 0, 255)
             # print(img0)
-            img0 = cv.resize(img0, re_size, interpolation=cv.INTER_LINEAR)
-            img1 = cv.resize(img1, re_size, interpolation=cv.INTER_LINEAR)
+            img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
+            img1 = cv.resize(img1, re_size, interpolation=cv.INTER_CUBIC)
             img0 = cv.flip(img0, 0)
             img1 = cv.flip(img1, 0)
 
             # blur, opening, and erode
-            blur0 = cv.GaussianBlur(img0, (21, 21), 0)
-            blur1 = cv.GaussianBlur(img1, (21, 21), 0)
+            blur0 = cv.GaussianBlur(img0, (25, 25), 0)
+            blur1 = cv.GaussianBlur(img1, (25, 25), 0)
             # im0.set_array(blur0)
             # im1.set_array(blur1)
             # # thresh = np.max(blur)*0.9
             # # ret, th = cv.threshold(blur, thresh, 255, cv.THRESH_BINARY)
             kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (25, 25))
+            # ret, blur0 = cv.threshold(blur0, 100, 255, cv.THRESH_BINARY)
+            # ret, blur1 = cv.threshold(blur1, 100, 255, cv.THRESH_BINARY)
+
             ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
             # th0_erode = cv.erode(th0, kernel)
             ret, th1 = cv.threshold(blur1, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
             # th1_erode = cv.erode(th1, kernel)
 
-
-
-            contours, hierarchy = cv.findContours(th0, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
+            contours, hierarchy = cv.findContours(th0, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
             # blur0 = cv.drawContours(blur0, contours, -1, (0, 255, 0), 3)
 
             areas = [cv.contourArea(c) for c in contours]
@@ -481,14 +498,29 @@ if __name__ == '__main__':
                 cv.fillPoly(mask, [cnt], 1)
                 # Use mask to crop data from original image
                 th0 = np.multiply(th0, mask)
+            if len(areas) > 1:
+                cnt0_prev = contours[areas.index(np.sort(areas)[-2])]
+            contours, hierarchy = cv.findContours(th1, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
+            # blur0 = cv.drawContours(blur0, contours, -1, (0, 255, 0), 3)
 
+            areas = [cv.contourArea(c) for c in contours]
+            if areas:
+                max_index = np.argmax(areas)
+                cnt = contours[max_index]
+                # Create a mask from the largest contour
+                mask = np.zeros(th1.shape)
+                cv.fillPoly(mask, [cnt], 1)
+                # Use mask to crop data from original image
+                th1 = np.multiply(th1, mask)
+            if len(areas) > 1:
+                cnt1_prev = contours[areas.index(np.sort(areas)[-2])]
             im2.set_array(th0)
             im3.set_array(th1)
 
             th0 = th0.astype(np.bool)
             th1 = th1.astype(np.bool)
-            th0_s = morphology.thin(th0, max_iter=20)
-            th1_s = morphology.thin(th1, max_iter=20)
+            th0_s = morphology.skeletonize(th0)
+            th1_s = morphology.skeletonize(th1)
             im4.set_array(th0_s)
             im5.set_array(th1_s)
             # th0m, distance0 = morphology.medial_axis(th0, return_distance=True)
@@ -507,10 +539,14 @@ if __name__ == '__main__':
             # bp0_ind = np.where(bp0 == 1)
             ep0 = endPoints(th0_s)
             ep0_ind = np.where(ep0 == 1)
+            # print(list(ep0_ind))
             if len(ep0_ind[0]) >= 1:
                 wedge0 = wristedge(th0, wedge0_prev)
                 wedge0_prev = wedge0
                 indextip0 = find_fingertip(wedge0, ep0_ind, re_size, indextip0_prev)
+                # print(cv.pointPolygonTest(cnt0_prev,(indextip0[1], indextip0[0]), False))
+                if len(cnt0_prev) > 1 and cv.pointPolygonTest(cnt0_prev,(indextip0[0], indextip0[1]), False) >= 0:
+                        indextip0 = indextip0_prev
             else:
                 indextip0 = indextip0_prev
 
@@ -526,6 +562,8 @@ if __name__ == '__main__':
                 wedge1 = wristedge(th1, wedge1_prev)
                 wedge1_prev = wedge1
                 indextip1 = find_fingertip(wedge1, ep1_ind, re_size, indextip1_prev)
+                if len(cnt1_prev) > 1 and cv.pointPolygonTest(cnt1_prev, (indextip1[0], indextip1[1]), False) >= 0:
+                    indextip1 = indextip1_prev
             else:
                 indextip1 = indextip1_prev
 
@@ -595,5 +633,5 @@ if __name__ == '__main__':
         stop_event.set()
         data_reader0.clean()
         data_reader0.clean()
-        # data_reader1.join()
-        # data_reader1.join()
+        data_reader1.join()
+        data_reader1.join()
