@@ -17,6 +17,7 @@ from skimage import morphology, data
 from skimage.util import invert
 from scipy import ndimage, spatial
 from mahotas.morph import hitmiss
+import pickle
 
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
@@ -85,8 +86,8 @@ def colorscale(datas, minc, maxc):
     # minc = np.min(datas)
     for data in datas:
         data_scale = int(256 * (data - minc) / (maxc - minc))
-        if data_scale < 0.55 * 256:
-        # if data_scale < 0:
+        # if data_scale < 0.5 * 256:
+        if data_scale < 0:
             data_scale = 0
         elif data_scale > 255:
             data_scale = 255
@@ -414,6 +415,8 @@ data_reader0.start()
 # data_reader1 = SerialReader(stop_event, q1, 'COM18')
 # data_reader1.start()
 re_size = (24*5, 32*5)
+with open('./cal_data/cal_matrix.pkl', 'rb') as file:
+    [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
 
 if __name__ == '__main__':
     try:
@@ -455,6 +458,11 @@ if __name__ == '__main__':
             # cnt += 1
             time0, temp0 = q0.get()
             temp1 = temp0
+
+            # temp0 = np.array(temp0) * 0.5 + np.array(temp0_bg) * 0.5
+            # temp1 = np.array(temp1) * 0.5 + np.array(temp1_bg) * 0.5
+            # temp0_bg = temp0
+            # temp1_bg = temp1
             # time1, temp1 = q1.get()
             # if cal_cnt >= 0:
             #     temp0_bg += np.array(temp0)
@@ -491,14 +499,22 @@ if __name__ == '__main__':
             # blur, opening, and erode
             blur0 = cv.GaussianBlur(img0, (25, 25), 0)
             # blur1 = img1
-            blur1 = cv.GaussianBlur(img1, (5, 5), 0)
+            blur1 = cv.GaussianBlur(img1, (15, 15), 0)
+
+            h, w = img1.shape[:2]
+            newcameramtx, roi = cv.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
+
+            # for img in cimg
+            blur1 = cv.undistort(blur1, mtx, dist, None, None)
+            # # crop the image
+            # x, y, w, h = roi
+            # blur1 = blur1[x:x + w,y:y + h]
+
             # im0.set_array(blur0)
             # im1.set_array(blur1)
             # # thresh = np.max(blur)*0.9
             # # ret, th = cv.threshold(blur, thresh, 255, cv.THRESH_BINARY)
             kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (25, 25))
-            # ret, blur0 = cv.threshold(blur0, 100, 255, cv.THRESH_BINARY)
-            # ret, blur1 = cv.threshold(blur1, 100, 255, cv.THRESH_BINARY)
 
             ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
             # th0_erode = cv.erode(th0, kernel)
@@ -507,52 +523,30 @@ if __name__ == '__main__':
 
             contours, hierarchy = cv.findContours(th0, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
 
-            areas = [cv.contourArea(c) for c in contours]
-            if areas:
-                max_index = np.argmax(areas)
-                cnt = contours[max_index]
-                M = cv.moments(cnt)
-                # calculate x,y coordinate of center
-                cX = int(M["m10"] / M["m00"])
-                cY = int(M["m01"] / M["m00"])
-                # blur0 = cv.drawContours(blur0, [cnt], -1, (0, 255, 0), 3)
-                # x, y, w, h = cv.boundingRect(cnt)
-                # cv.rectangle(blur0, (x, h), (w, y), (0, 255, 0), 3)
-                hull = cv.convexHull(cnt, returnPoints=False)
-                defects = cv.convexityDefects(cnt, hull)
-                starts = list()
-                ends = list()
-                for i in range(defects.shape[0]):
-                    s, e, f, d = defects[i, 0]
-                    start = tuple(cnt[s][0])
-                    end = tuple(cnt[e][0])
-                    starts.append(start)
-                    ends.append(end)
-                    far = tuple(cnt[f][0])
-                    cv.line(blur0, start, end, [255, 255, 255], 2)
-                    cv.circle(blur0, far, 5, (int(d),255,255), -1)
-                print(starts)
-                print(ends)
-                blur0 = cv.drawContours(blur0, cnt, -1, (0, 255, 0), 3)
-                # Create a mask from the largest contour
-                mask = np.zeros(th0.shape)
-                cv.fillPoly(mask, [cnt], 1)
-                # Use mask to crop data from original image
-                th0 = np.multiply(th0, mask)
-            # if len(areas) > 1:
-            #     cnt0_prev = contours[areas.index(np.sort(areas)[-2])]
+            blur0 = cv.drawContours(blur0, contours, -1, (0, 255, 0), 3)
+            # areas = [cv.contourArea(c) for c in contours]
+            # if areas:
+            #     max_index = np.argmax(areas)
+            #     cnt = contours[max_index]
+            #     # Create a mask from the largest contour
+            #     mask = np.zeros(th0.shape)
+            #     cv.fillPoly(mask, [cnt], 1)
+            #     # Use mask to crop data from original image
+            #     th0 = np.multiply(th0, mask)
+            # # if len(areas) > 1:
+            # #     cnt0_prev = contours[areas.index(np.sort(areas)[-2])]
             contours, hierarchy = cv.findContours(th1, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
-            # blur1 = cv.drawContours(blur1, contours, -1, (0, 255, 0), 3)
+            blur1 = cv.drawContours(blur1, contours, -1, (0, 255, 0), 3)
 
-            areas = [cv.contourArea(c) for c in contours]
-            if areas:
-                max_index = np.argmax(areas)
-                cnt = contours[max_index]
-                # Create a mask from the largest contour
-                mask = np.zeros(th1.shape)
-                cv.fillPoly(mask, [cnt], 1)
-                # Use mask to crop data from original image
-                th1 = np.multiply(th1, mask)
+            # areas = [cv.contourArea(c) for c in contours]
+            # if areas:
+            #     max_index = np.argmax(areas)
+            #     cnt = contours[max_index]
+            #     # Create a mask from the largest contour
+            #     mask = np.zeros(th1.shape)
+            #     cv.fillPoly(mask, [cnt], 1)
+            #     # Use mask to crop data from original image
+            #     th1 = np.multiply(th1, mask)
             # if len(areas) > 1:
             #     cnt1_prev = contours[areas.index(np.sort(areas)[-2])]
             im2.set_array(th0)
@@ -571,105 +565,14 @@ if __name__ == '__main__':
             # im4.set_array(th0_m)
             # im5.set_array(th1_m)
 
-            # im3.set_array(th1_s)
-            # th0_s = morphology.thin(th0, max_iter=17)
-            # th1_s = morphology.thin(th1, max_iter=17)
 
-            # im2.set_array(th0_s)
-            # bp0 = branchPoints(th0_s)
-            # bp0_ind = np.where(bp0 == 1)
-            ep0 = endPoints(th0_s)
-            ep0_ind = np.where(ep0 == 1)
-            # print(list(ep0_ind))
-            if len(ep0_ind[0]) >= 1:
-                wedge0 = wristedge(th0, wedge0_prev)
-                wedge0_prev = wedge0
-                indextip0 = find_fingertip(wedge0, ep0_ind, re_size, indextip0_prev)
-                # print(cv.pointPolygonTest(cnt0_prev,(indextip0[1], indextip0[0]), False))
-                # if len(cnt0_prev) > 1 and cv.pointPolygonTest(cnt0_prev,(indextip0[0], indextip0[1]), False) >= 0:
-                #         indextip0 = indextip0_prev
-            else:
-                indextip0 = indextip0_prev
-
-            # cv.putText(blur0, '*', (50, 70), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv.LINE_AA)
-            # im2.set_array(blur0)
-
-
-            # bp1 = branchPoints(th1_s)
-            # bp1_ind = np.where(bp1 == 1)
-            ep1 = endPoints(th1_s)
-            ep1_ind = np.where(ep1 == 1)
-            if len(ep1_ind[0]) >= 1:
-                wedge1 = wristedge(th1, wedge1_prev)
-                wedge1_prev = wedge1
-                indextip1 = find_fingertip(wedge1, ep1_ind, re_size, indextip1_prev)
-                # if len(cnt1_prev) > 1 and cv.pointPolygonTest(cnt1_prev, (indextip1[0], indextip1[1]), False) >= 0:
-                #     indextip1 = indextip1_prev
-            else:
-                indextip1 = indextip1_prev
-
-            # center = [-1, -1]
-            # contours, hierarchy = cv.findContours(th0_erode, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
-            # areas = [cv.contourArea(c) for c in contours]
-            # if areas:
-            #     # print(areas)
-            #     max_index = np.argmax(areas)
-            #     cnt = contours[max_index]
-            #     x, y, w, h = cv.boundingRect(cnt)
-            #     center = [x + w / 2, y + h / 2]
-            #
-            # indextip0 = find_indextip((np.array([center[0]]), np.array([center[1]])), ep0_ind, indextip0_prev)
-            # indextip0, bp_prev = find_indextip(bp0_ind, ep0_ind, indextip0_prev, bp_prev)
-            # indextip1 = find_indextip(bp1_ind, ep1_ind, indextip1_prev)
-            indextip0_prev = indextip0
-            indextip1_prev = indextip1
-
-            print('ring0 tip in {}, ring1 tip is {}, edge is {}'.format(indextip0, indextip1, [wedge0_prev, wedge1_prev]))
-            # ep1 = endPoints(th0_s)
-            # im2.set_array(
-            # im3.set_array(branchPoints(th1_s))
-            # im4.set_array(endPoints(th0_s))
-            # im5.set_array(endPoints(th1_s))
-
-            # th0_s = np.array(th0_s, np.uint8)
-            # indextip0 = trackFingertip(th0_s, indextip0_prev)
-            # indextip0_prev = indextip0
-            # if indextip0 is not None:
             blur0 = cv.circle(blur0, (indextip0[1], indextip0[0]), 5, (0, 127, 255), -1)
-            # blurt = blur0.transpose()
-            # blur0[indextip0[0]:] = 0
-            # blur0 = blurt.transpose()
             # cv.putText(blur0, '*', (indextip0[1], indextip0[0]), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv.LINE_AA)
-            # im2.set_array(th0_s)
-            # indextip1 = trackFingertip(th_erode1, indextip1_prev)
-            # indextip1_prev = indextip1
-            # if indextip1 is not None:
-
             blur1 = cv.circle(blur1, (indextip1[1], indextip1[0]), 5, (0, 127, 255), -1)
-            blur0 = cv.circle(blur0, (cX, cY), 5, (0, 127, 255), -1)
-
             # cv.putText(blur1,'*',(indextip1[1], indextip1[0]), cv.FONT_HERSHEY_SIMPLEX, 1, (255,255,255),2,cv.LINE_AA)
-
             im0.set_array(blur0)
             im1.set_array(blur1)
-            # im3.set_array(th_erode1)
-            # plt.pause(0.001)
-
-        # # plt.ioff()
-        # plt.show()
-        # fig, (ax1, ax0) = plt.subplots(1, 2)
-        # im1 = ax1.imshow(np.random.uniform(low=22, high=32, size=(8, 8)), vmin=22, vmax=32, cmap='jet', interpolation='lanczos')
-        # im0 = ax0.imshow(np.random.uniform(low=22, high=32, size=(8,8)), vmin = 22, vmax = 32, cmap='jet', interpolation='lanczos')
-        # plt.tight_layout()
-        # plt.ion()
-        # while True:
-        #     [frame1, frame0] = q.get()
-        #     im1.set_array(np.reshape(frame1, (8, 8)))
-        #     im0.set_array(np.reshape(frame0, (8, 8)))
-        #     # plt.draw()
             plt.pause(0.001)
-        # plt.ioff()
-        # plt.show()
     # except KeyboardInterrupt:
     #     cv.imwrite('./fingertip.jpg', img0)
     # except ValueError:

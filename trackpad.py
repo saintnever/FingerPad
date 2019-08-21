@@ -85,7 +85,7 @@ def colorscale(datas, minc, maxc):
     # minc = np.min(datas)
     for data in datas:
         data_scale = int(256 * (data - minc) / (maxc - minc))
-        if data_scale < 0.55 * 256:
+        if data_scale < 0.5 * 256:
         # if data_scale < 0:
             data_scale = 0
         elif data_scale > 255:
@@ -108,7 +108,6 @@ def find_furthest(contour, center):
             dmax = d
             index = [x, y]
     return index
-
 
 def trackFingertip(img, tip_prev):
     contours, hierarchy = cv.findContours(img, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
@@ -507,33 +506,22 @@ if __name__ == '__main__':
 
             contours, hierarchy = cv.findContours(th0, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
 
+            blur0 = cv.drawContours(blur0, contours, -1, (0, 255, 0), 3)
+
             areas = [cv.contourArea(c) for c in contours]
             if areas:
                 max_index = np.argmax(areas)
                 cnt = contours[max_index]
                 M = cv.moments(cnt)
+
+
+                # blur1 = cv.drawContours(blur1, [cnt], -1, (0, 255, 0), 3)
+
                 # calculate x,y coordinate of center
-                cX = int(M["m10"] / M["m00"])
-                cY = int(M["m01"] / M["m00"])
-                # blur0 = cv.drawContours(blur0, [cnt], -1, (0, 255, 0), 3)
-                # x, y, w, h = cv.boundingRect(cnt)
-                # cv.rectangle(blur0, (x, h), (w, y), (0, 255, 0), 3)
-                hull = cv.convexHull(cnt, returnPoints=False)
-                defects = cv.convexityDefects(cnt, hull)
-                starts = list()
-                ends = list()
-                for i in range(defects.shape[0]):
-                    s, e, f, d = defects[i, 0]
-                    start = tuple(cnt[s][0])
-                    end = tuple(cnt[e][0])
-                    starts.append(start)
-                    ends.append(end)
-                    far = tuple(cnt[f][0])
-                    cv.line(blur0, start, end, [255, 255, 255], 2)
-                    cv.circle(blur0, far, 5, (int(d),255,255), -1)
-                print(starts)
-                print(ends)
-                blur0 = cv.drawContours(blur0, cnt, -1, (0, 255, 0), 3)
+                # cX = int(M["m10"] / M["m00"])
+                # cY = int(M["m01"] / M["m00"])
+                # cv.putText(blur0, '*', (cX, cY), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv.LINE_AA)
+
                 # Create a mask from the largest contour
                 mask = np.zeros(th0.shape)
                 cv.fillPoly(mask, [cnt], 1)
@@ -548,6 +536,9 @@ if __name__ == '__main__':
             if areas:
                 max_index = np.argmax(areas)
                 cnt = contours[max_index]
+                x, y, w, h = cv.boundingRect(cnt)
+                indextip1 = (x+w, y)
+                cv.rectangle(blur1, (x, h), (w, y), (0, 255, 0), 3)
                 # Create a mask from the largest contour
                 mask = np.zeros(th1.shape)
                 cv.fillPoly(mask, [cnt], 1)
@@ -581,10 +572,10 @@ if __name__ == '__main__':
             ep0 = endPoints(th0_s)
             ep0_ind = np.where(ep0 == 1)
             # print(list(ep0_ind))
-            if len(ep0_ind[0]) >= 1:
-                wedge0 = wristedge(th0, wedge0_prev)
-                wedge0_prev = wedge0
-                indextip0 = find_fingertip(wedge0, ep0_ind, re_size, indextip0_prev)
+            if len(ep0_ind[0]) > 1:
+                # wedge0 = wristedge(th0, wedge0_prev)
+                # wedge0_prev = wedge0
+                indextip0 = find_fingertip(4, ep0_ind, re_size, indextip0_prev)
                 # print(cv.pointPolygonTest(cnt0_prev,(indextip0[1], indextip0[0]), False))
                 # if len(cnt0_prev) > 1 and cv.pointPolygonTest(cnt0_prev,(indextip0[0], indextip0[1]), False) >= 0:
                 #         indextip0 = indextip0_prev
@@ -600,11 +591,13 @@ if __name__ == '__main__':
             ep1 = endPoints(th1_s)
             ep1_ind = np.where(ep1 == 1)
             if len(ep1_ind[0]) >= 1:
-                wedge1 = wristedge(th1, wedge1_prev)
-                wedge1_prev = wedge1
-                indextip1 = find_fingertip(wedge1, ep1_ind, re_size, indextip1_prev)
-                # if len(cnt1_prev) > 1 and cv.pointPolygonTest(cnt1_prev, (indextip1[0], indextip1[1]), False) >= 0:
-                #     indextip1 = indextip1_prev
+                ind = np.argmax(ep1_ind[0])
+                indextip1 = [ep1_ind[0][ind], ep1_ind[1][ind]]
+            #     wedge1 = wristedge(th1, wedge1_prev)
+            #     wedge1_prev = wedge1
+            #     indextip1 = find_fingertip(wedge1, ep1_ind, re_size, indextip1_prev)
+            #     # if len(cnt1_prev) > 1 and cv.pointPolygonTest(cnt1_prev, (indextip1[0], indextip1[1]), False) >= 0:
+            #     #     indextip1 = indextip1_prev
             else:
                 indextip1 = indextip1_prev
 
@@ -636,9 +629,6 @@ if __name__ == '__main__':
             # indextip0_prev = indextip0
             # if indextip0 is not None:
             blur0 = cv.circle(blur0, (indextip0[1], indextip0[0]), 5, (0, 127, 255), -1)
-            # blurt = blur0.transpose()
-            # blur0[indextip0[0]:] = 0
-            # blur0 = blurt.transpose()
             # cv.putText(blur0, '*', (indextip0[1], indextip0[0]), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv.LINE_AA)
             # im2.set_array(th0_s)
             # indextip1 = trackFingertip(th_erode1, indextip1_prev)
@@ -646,8 +636,6 @@ if __name__ == '__main__':
             # if indextip1 is not None:
 
             blur1 = cv.circle(blur1, (indextip1[1], indextip1[0]), 5, (0, 127, 255), -1)
-            blur0 = cv.circle(blur0, (cX, cY), 5, (0, 127, 255), -1)
-
             # cv.putText(blur1,'*',(indextip1[1], indextip1[0]), cv.FONT_HERSHEY_SIMPLEX, 1, (255,255,255),2,cv.LINE_AA)
 
             im0.set_array(blur0)

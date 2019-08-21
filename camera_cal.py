@@ -1,67 +1,77 @@
 import cv2 as cv
+import os
+import imutils
 import numpy as np
 import glob
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+import pickle
 
-def find_furthest(contour, center):
-    dmax = 0
-    index = 0
-    for item in contour:
-        # print(item)
-        d = (item[0][0]-center[0])**2 + (item[0][1]-center[1])**2
-        if d > dmax:
-            dmax = d
-            index = item
-    return index[0]
+path = './cal_data/'
 
-# images = glob.glob('*.jpg')
-# img = cv2.imread('acircles_pattern.png')
-#
-# gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-# ret, points = cv2.findCirclesGrid(gray, (11, 4), flags=cv2.CALIB_CB_ASYMMETRIC_GRID + cv2.CALIB_CB_CLUSTERING)
-# # ret, corners = cv2.findChessboardCorners(gray, (4,3), None)
-fig = plt.figure()
-img0 = np.load('fingertip.npy')
-plt.imshow(img0, cmap='jet')
+cimg = list()
+filenames = [filename for filename in os.listdir(path) if filename.endswith('0.jpg')]
+for file in filenames:
+    img_raw = cv.imread(path+file)
+    img_raw = cv.cvtColor(img_raw, cv.COLOR_BGR2GRAY)
+    ret, th = cv.threshold(img_raw, 30, 255, cv.THRESH_BINARY)
+    cimg.append(th)
 
-
-# # gray = cv2.cvtColor(data0, cv2.COLOR_BGR2GRAY)
-blur = cv.GaussianBlur(img0, (5, 5), 0)
-ret, th = cv.threshold(blur, 30, 255, cv.THRESH_BINARY)
-plt.imshow(blur)
-plt.imshow(th)
-contours, hierarchy = cv.findContours(th, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
-areas = [cv.contourArea(c) for c in contours]
-# cv.drawContours(th, contours, -1, (0,255,0))
-# plt.imshow(th)
+objpoints = [[[0,0,0],[60,0,0],[120,0,0],
+            [30,30,0],[90,30,0],
+            [0,60,0],[60,60,0],[120,60,0],
+            [30,90,0],[90,90,0]] for _ in cimg]
+# plt.figure()
+# plt.imshow(cimg[0])
 # plt.show()
+cal_points = list()
+for i,img in enumerate(cimg):
+    contours, hierachy = cv.findContours(img, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
+    # cv.drawContours(img, contours, -1, (0, 255, 0), 5)
+    # # contours = imutils.grab_contours(contours)
+    img_points = list()
+    contours = reversed(contours)
+    for cnt in contours:
+        M = cv.moments(cnt)
+        # calculate x,y coordinate of center
+        cX = int(M["m10"] / M["m00"])
+        cY = int(M["m01"] / M["m00"])
+        img_points.append([cX, cY])
+    cal_points.append(img_points)
 
-if areas:
-    print(areas)
-    max_index = np.argmax(areas)
-    cnt = contours[max_index]
+ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(np.array(objpoints, np.float32)[:len(cal_points)], np.array(cal_points,np.float32), cimg[0].shape, None, None)
+with open(path+'cal_matrix.pkl', 'wb') as file:
+    pickle.dump([ret, mtx, dist, rvecs, tvecs], file)
 
-    x, y, w, h = cv.boundingRect(cnt)
-    # cv.rectangle(th, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    center = [x+w/2, y+h/2]
-    # print(x + w / 2)
-    # print(y + h / 2)
-    ftip = find_furthest(contours[max_index], center)
-    print(ftip)
-    th[ftip[1], ftip[0]] = 125
-    plt.imshow(th)
+
+timg = list()
+filenames = [filename for filename in os.listdir(path) if filename.endswith('1.jpg')]
+for file in filenames:
+    img_raw = cv.imread(path+file)
+    img_raw = cv.cvtColor(img_raw, cv.COLOR_BGR2GRAY)
+    ret, th = cv.threshold(img_raw, 30, 255, cv.THRESH_BINARY)
+    timg.append(th)
+
+for img in timg:
+    plt.figure()
+    plt.imshow(img)
+    plt.title('origin')
     plt.show()
-    # flag1 = findYLoc(y + h / 2)
-    # flag2 = findXLoc(x + w / 2, flag1)
-# area
-# # skeleton
-# kernel = np.ones((3, 3), np.uint8)
-# erosion = cv.erode(th, kernel, iterations=1)
-# plt.imshow(erosion)
-# plt.show()
 
-# # hit-or-miss detection of fingertip
-# kernel = np.array([[0, -1, 0], [0, 1, -1], [1, 1, 1]], np.uint8)
-# img_output = np.array([[0] * 32 for _ in range(24)], np.uint8)
-# erosion = cv.morphologyEx(th, cv.MORPH_HITMISS, kernel)
+    h,  w = img.shape[:2]
+    newcameramtx, roi=cv.getOptimalNewCameraMatrix(mtx,dist,(w,h),1,(w,h))
+
+    # for img in cimg
+    dst = cv.undistort(img, mtx, dist, None, None)
+    plt.figure()
+    plt.imshow(dst)
+    plt.title('undistored')
+    plt.show()
+
+
+
+
+
+
+
+
