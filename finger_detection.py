@@ -406,6 +406,12 @@ def find_indextip(bp0_ind, ep0_ind, indextip_prev, bp_prev):
     # else:
     #     return indextip_prev
 
+def distance(point1, point2=None):
+    if point2:
+        return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+    else:
+        return math.sqrt(point1[0] ** 2 + point1[1] ** 2)
+
 q0 = queue.Queue()
 q1 = queue.Queue()
 stop_event = threading.Event()
@@ -454,6 +460,9 @@ if __name__ == '__main__':
             #     mask = np.array([[255] * 32 for _ in range(24)], np.uint8)
             # cnt += 1
             time0, temp0 = q0.get()
+            # for i in range(len(temp0)):
+            #     if temp0[i] < 30:
+            #         temp0[i]=0
             temp1 = temp0
             # time1, temp1 = q1.get()
             # if cal_cnt >= 0:
@@ -491,7 +500,7 @@ if __name__ == '__main__':
             # blur, opening, and erode
             blur0 = cv.GaussianBlur(img0, (25, 25), 0)
             # blur1 = img1
-            blur1 = cv.GaussianBlur(img1, (5, 5), 0)
+            blur1 = cv.GaussianBlur(img1, (25, 25), 0)
             # im0.set_array(blur0)
             # im1.set_array(blur1)
             # # thresh = np.max(blur)*0.9
@@ -520,26 +529,37 @@ if __name__ == '__main__':
                 # cv.rectangle(blur0, (x, h), (w, y), (0, 255, 0), 3)
                 hull = cv.convexHull(cnt, returnPoints=False)
                 defects = cv.convexityDefects(cnt, hull)
-                starts = list()
-                ends = list()
-                for i in range(defects.shape[0]):
-                    s, e, f, d = defects[i, 0]
+                ymin = 1000
+                xmax = 0
+                distmax = 0
+                p1 = 0
+                p2 = 0
+                for l in range(defects.shape[0]):
+                    s, e, f, d = defects[l, 0]
                     start = tuple(cnt[s][0])
                     end = tuple(cnt[e][0])
-                    starts.append(start)
-                    ends.append(end)
-                    far = tuple(cnt[f][0])
-                    cv.line(blur0, start, end, [255, 255, 255], 2)
-                    cv.circle(blur0, far, 5, (int(d),255,255), -1)
-                print(starts)
-                print(ends)
+                    if start[0] > xmax:
+                        xmax = start[0]
+                        p1 = start
+                    if start[1] < ymin:
+                        ymin = start[1]
+                        p2 = start
+                    if end[0] > xmax:
+                        xmax = end[0]
+                        p1 = end
+                    if end[1] < ymin:
+                        ymin = end[1]
+                        p2 = end
+                cv.circle(blur0, p1, 5, (0, 255, 255), -1)
+                cv.line(blur0, p1, p2, [255, 255, 255], 2)
                 blur0 = cv.drawContours(blur0, cnt, -1, (0, 255, 0), 3)
                 # Create a mask from the largest contour
                 mask = np.zeros(th0.shape)
                 cv.fillPoly(mask, [cnt], 1)
                 # Use mask to crop data from original image
                 th0 = np.multiply(th0, mask)
-            # if len(areas) > 1:
+                blur1 = np.multiply(blur1, mask)
+                # if len(areas) > 1:
             #     cnt0_prev = contours[areas.index(np.sort(areas)[-2])]
             contours, hierarchy = cv.findContours(th1, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
             # blur1 = cv.drawContours(blur1, contours, -1, (0, 255, 0), 3)
@@ -553,6 +573,7 @@ if __name__ == '__main__':
                 cv.fillPoly(mask, [cnt], 1)
                 # Use mask to crop data from original image
                 th1 = np.multiply(th1, mask)
+
             # if len(areas) > 1:
             #     cnt1_prev = contours[areas.index(np.sort(areas)[-2])]
             im2.set_array(th0)
@@ -624,7 +645,8 @@ if __name__ == '__main__':
             indextip0_prev = indextip0
             indextip1_prev = indextip1
 
-            print('ring0 tip in {}, ring1 tip is {}, edge is {}'.format(indextip0, indextip1, [wedge0_prev, wedge1_prev]))
+            print('ring0 tip in {}, ring1 tip is {}, edge is {}, temp is {}'.
+                  format(indextip0, indextip1, [wedge0_prev, wedge1_prev], np.mean(blur1[blur1>0])))
             # ep1 = endPoints(th0_s)
             # im2.set_array(
             # im3.set_array(branchPoints(th1_s))

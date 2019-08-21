@@ -414,11 +414,25 @@ def find_indextip(bp0_ind, ep0_ind, indextip_prev, bp_prev):
     # else:
     #     return indextip_prev
 
-def dist(point1, point2=None):
-    if point2:
+def distance(point1, point2=None):
+    if point2 is not None:
         return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
     else:
         return math.sqrt(point1[0] ** 2 + point1[1] ** 2)
+
+def find_nearestn(point, contour, n):
+    dists = list()
+    for p in contour:
+        # print(point, list(p[0]))
+        dists.append(distance(point, list(p[0])))
+    dists_sort = sorted(dists)
+    if len(dists) < n:
+        n = len(dists)
+    points = list()
+    print(dists_sort)
+    for i in range(n):
+        points.append(contour[dists.index(dists_sort[i])][0])
+    return np.array(points, np.int32)
 
 re_size = (32*5, 32*5)
 path = './trackpad_model_data/'
@@ -483,6 +497,7 @@ if __name__ == '__main__':
                 areas = [cv.contourArea(c) for c in contours]
                 cnt = []
                 mask = np.zeros(th0.shape)
+                indextip = (0,0)
                 if areas:
                     max_index = np.argmax(areas)
                     cnt = contours[max_index]
@@ -511,19 +526,20 @@ if __name__ == '__main__':
                         if end[1] < ymin:
                             ymin = end[1]
                             p2 = end
-                        if dist(start) > distmax:
-                            distmax = dist(start)
-                            indextip0 = start
-                        if dist(end) > d:
-                            distmax = dist(end)
-                            indextip0 = end
+                        # if distance(start) > distmax:
+                        #     distmax = distance(start)
+                        #     indextip = start
+                        # if distance(end) > distmax:
+                        #     distmax = distance(end)
+                        #     indextip = end
 
                         # far = tuple(cnt[f][0])
-                    cv.circle(blur, indextip0, 5, (0, 255, 255), -1)
+                        # cv.circle(blur, far, 5, (0, 255, 255), -1)
 
+                    # cv.circle(blur, p1, 5, (0, 255, 255), -1)
                     cv.line(blur, p1, p2, [255, 255, 255], 2)
-                    print(starts)
-                    print(ends)
+                    # cv.drawContours(blur, cnt[hull], -1, (255, 255, 255), 2)
+
 
                     # Create a mask from the largest contour
                     cv.fillPoly(mask, [cnt], 1)
@@ -540,69 +556,76 @@ if __name__ == '__main__':
                 indextip0 = [-1, -1]
                 if len(ep0_ind[0]) >= 1:
                     indextip0 = find_fingertip(4, ep0_ind, re_size)
+
+                fit_points = find_nearestn([indextip0[1], indextip0[0]], cnt, 20)
+                # for p in fit_points:
+                #     cv.circle(blur, tuple(p[0]), 1, (255, 255, 255), -1)
+                rrect = cv.fitEllipse(fit_points)
+                cv.ellipse(blur, rrect, (255, 255, 255), 1, cv.LINE_AA)
+                # cv.drawContours(blur, [fit_points], -1, (255, 255, 255), 2)
                 mask_ft = np.zeros(th0.shape)
-                cv.circle(mask_ft, (indextip0[1], indextip0[0]), 10, (255, 255, 255), -1)
+                # cv.circle(mask_ft, (indextip0[1], indextip0[0]), 10, (255, 255, 255), -1)
                 mask_ft = np.multiply(mask_ft, mask)
                 # blur_raw = np.multiply(blur_raw, mask_ft.astype(bool))
-
-                # cv.fillPoly(mask_ft, [cnt], 1)
-                # plt.figure()
-                # plt.imshow(th0_s, cmap='seismic')
-                # plt.title(str(i)+'_'+str(j))
-                # plt.show()
-
-                ref = np.zeros_like(th0, np.uint8)
-                ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
-                # Define total number of angles we want
-                N = 20
-                dists = list()
-                # Step #6
-                lines = list()
-                for l in range(N):
-                    # Step #6b
-                    theta = l * (360 / N)
-                    theta *= np.pi / 180.0
-                    # Step #6c
-                    tmp = np.zeros_like(th0, np.uint8)
-
-                    cv.line(tmp, (int(indextip0[1] - np.cos(theta) * 100),
-                              int(indextip0[0] + np.sin(theta) * 100)),
-                             (int(indextip0[1] + np.cos(theta) * 100),
-                              int(indextip0[0] - np.sin(theta) * 100)), 255, 1)
-
-                    # Step #6d
-                    (y_intercept, x_intercept) = np.nonzero(np.logical_and(tmp, ref))
-                    if len(x_intercept) < 2:
-                        continue
-                    elif len(x_intercept) == 2:
-                        id0 = 0
-                        id1 = 1
-                    else:
-                        id0 = 0
-                        id1 = 0
-                        for m, xp in enumerate(x_intercept):
-                            if xp < indextip0[1]:
-                                continue
-                            else:
-                                id0 = m-1
-                                id1 = m
-                                break
-
-                    dist = math.sqrt((x_intercept[id0] - x_intercept[id1]) ** 2 + (y_intercept[id0] - y_intercept[id1]) ** 2)
-                    if dist == 0:
-                        continue
-                    lines.append([(x_intercept[id0], y_intercept[id0]), (x_intercept[id1], y_intercept[id1])])
-                    dists.append(dist)
-                id_width = np.argmin(dists)
-                # ftips.append([i, j, (indextip0[1], indextip0[0]), np.mean(blur_raw[blur_raw>0])])
-                ftips.append([i, j, (indextip0[1], indextip0[0]), dists[id_width]])
-                cv.line(blur, lines[id_width][0], lines[id_width][1], 0, 1)
+                #
+                # # cv.fillPoly(mask_ft, [cnt], 1)
+                # # plt.figure()
+                # # plt.imshow(th0_s, cmap='seismic')
+                # # plt.title(str(i)+'_'+str(j))
+                # # plt.show()
+                #
+                # ref = np.zeros_like(th0, np.uint8)
+                # ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
+                # # Define total number of angles we want
+                # N = 20
+                # dists = list()
+                # # Step #6
+                # lines = list()
+                # for l in range(N):
+                #     # Step #6b
+                #     theta = l * (360 / N)
+                #     theta *= np.pi / 180.0
+                #     # Step #6c
+                #     tmp = np.zeros_like(th0, np.uint8)
+                #
+                #     cv.line(tmp, (int(indextip0[1] - np.cos(theta) * 100),
+                #               int(indextip0[0] + np.sin(theta) * 100)),
+                #              (int(indextip0[1] + np.cos(theta) * 100),
+                #               int(indextip0[0] - np.sin(theta) * 100)), 255, 1)
+                #
+                #     # Step #6d
+                #     (y_intercept, x_intercept) = np.nonzero(np.logical_and(tmp, ref))
+                #     if len(x_intercept) < 2:
+                #         continue
+                #     elif len(x_intercept) == 2:
+                #         id0 = 0
+                #         id1 = 1
+                #     else:
+                #         id0 = 0
+                #         id1 = 0
+                #         for m, xp in enumerate(x_intercept):
+                #             if xp < indextip0[1]:
+                #                 continue
+                #             else:
+                #                 id0 = m-1
+                #                 id1 = m
+                #                 break
+                #
+                #     dist = math.sqrt((x_intercept[id0] - x_intercept[id1]) ** 2 + (y_intercept[id0] - y_intercept[id1]) ** 2)
+                #     if dist == 0:
+                #         continue
+                #     lines.append([(x_intercept[id0], y_intercept[id0]), (x_intercept[id1], y_intercept[id1])])
+                #     dists.append(dist)
+                # id_width = np.argmin(dists)
+                ftips.append([i, j, (indextip[1], indextip[0]), np.mean(blur_raw[blur_raw>0])])
+                # ftips.append([i, j, (indextip[1], indextip[0]), ])
+                # cv.line(blur, lines[id_width][0], lines[id_width][1], 0, 1)
                 # blur = cv.circle(blur, (indextip0[1], indextip0[0]), 5, (0, 127, 255), -1)
 
                 # plt.figure()
                 fig, ([ax0, ax1]) = plt.subplots(1,2)
                 ax0.imshow(blur, cmap='seismic')
-                ax1.imshow(th0_s, cmap='seismic')
+                # ax1.imshow(th0_s, cmap='seismic')
                 plt.title(str(i) + '_' + str(j))
                 plt.show()
                 #
