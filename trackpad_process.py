@@ -429,10 +429,31 @@ def find_nearestn(point, contour, n):
     if len(dists) < n:
         n = len(dists)
     points = list()
-    print(dists_sort)
+    # print(dists_sort)
     for i in range(n):
         points.append(contour[dists.index(dists_sort[i])][0])
     return np.array(points, np.int32)
+
+
+def getPerpCoord(aX, aY, bX, bY, length):
+    vX = bX-aX
+    vY = bY-aY
+    #print(str(vX)+" "+str(vY))
+    if(vX == 0 or vY == 0):
+        return 0, 0, 0, 0
+    mag = math.sqrt(vX*vX + vY*vY)
+    vX = vX / mag
+    vY = vY / mag
+    temp = vX
+    vX = 0-vY
+    vY = temp
+    pX = aX + (bX-aX) * 0.1
+    pY = aY + (bX-aX) * 0.1
+    cX = pX + vX * length
+    cY = pY + vY * length
+    dX = pX - vX * length
+    dY = pY - vY * length
+    return int(cX), int(cY), int(dX), int(dY)
 
 re_size = (32*5, 32*5)
 path = './trackpad_model_data/'
@@ -461,10 +482,10 @@ if __name__ == '__main__':
         # with open(path + 'images_model.pkl', 'rb') as file:
         #     cimg = pickle.load(file)
         ftips = list()
-        # for i in range(xrg):
-        #     for j in range(yrg):
-        for i in [1, 5, 9]:
-            for j in [1, 5, 9]:
+        for i in range(xrg):
+            for j in range(yrg):
+        # for i in [6]:
+        #     for j in [4]:
                 # img = np.mean(cimg[i][j], axis=0)
                 # img = cimg[i][j][int(len(cimg[i][j]) / 2)]
                 temp = np.amin(temps[i][j], axis=0)
@@ -497,7 +518,7 @@ if __name__ == '__main__':
                 areas = [cv.contourArea(c) for c in contours]
                 cnt = []
                 mask = np.zeros(th0.shape)
-                indextip = (0,0)
+                indextip = (0, 0)
                 if areas:
                     max_index = np.argmax(areas)
                     cnt = contours[max_index]
@@ -537,10 +558,27 @@ if __name__ == '__main__':
                         # cv.circle(blur, far, 5, (0, 255, 255), -1)
 
                     # cv.circle(blur, p1, 5, (0, 255, 255), -1)
-                    cv.line(blur, p1, p2, [255, 255, 255], 2)
+                    cv.line(blur, p1, p2, [255, 255, 255], 1)
+                    c0, c1, d0, d1 = getPerpCoord(p1[0], p1[1], p2[0], p2[1], 50)
+                    tmp = np.zeros_like(blur, np.uint8)
+                    cv.line(tmp, (c0, c1), (d0, d1), [255, 255, 255], 5)
+                    ref = np.zeros_like(blur, np.uint8)
+                    ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
+                    # Step #6d
+                    (x_intercept, y_intercept) = np.nonzero(np.logical_and(tmp, ref))
+                    p1 = np.array(p1)
+                    p2 = np.array(p2)
+                    dists = list()
+                    for m in range(len(x_intercept)):
+                        p3 = np.array([y_intercept[m], x_intercept[m]])
+                        cv.circle(blur, tuple(p3), 2, (0, 255, 255), -1)
+                        dist = abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
+                        if dist > 8 and dist < 40:
+                            dists.append(dist)
+                    if len(dists) != 0:
+                        print('x:{}, y:{}, width:{}, area ratio:{}, wrist ratio:{}'.format(i,j,np.nanmin(dists), 0,0))
+                    cv.line(blur, (c0, c1), (d0, d1), [255, 255, 255], 5)
                     # cv.drawContours(blur, cnt[hull], -1, (255, 255, 255), 2)
-
-
                     # Create a mask from the largest contour
                     cv.fillPoly(mask, [cnt], 1)
                     # Use mask to crop data from original image
@@ -623,11 +661,11 @@ if __name__ == '__main__':
                 # blur = cv.circle(blur, (indextip0[1], indextip0[0]), 5, (0, 127, 255), -1)
 
                 # plt.figure()
-                fig, ([ax0, ax1]) = plt.subplots(1,2)
-                ax0.imshow(blur, cmap='seismic')
-                # ax1.imshow(th0_s, cmap='seismic')
-                plt.title(str(i) + '_' + str(j))
-                plt.show()
+                # fig, ([ax0, ax1]) = plt.subplots(1,2)
+                # ax0.imshow(blur, cmap='seismic')
+                # # ax1.imshow(th0_s, cmap='seismic')
+                # plt.title(str(i) + '_' + str(j))
+                # plt.show()
                 #
                 # # Step #6e
                 # cv.line(blur, (indextip0[1], indextip0[0]), (x_intercept[-1], y_intercept[-1]), 0, 1)
