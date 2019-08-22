@@ -482,8 +482,9 @@ if __name__ == '__main__':
         # with open(path + 'images_model.pkl', 'rb') as file:
         #     cimg = pickle.load(file)
         ftips = list()
-        for i in range(xrg):
-            for j in range(yrg):
+        dist_list = [[0 for _ in range(xrg)] for _ in range(yrg)]
+        for j in range(xrg):
+            for i in range(yrg):
         # for i in [6]:
         #     for j in [4]:
                 # img = np.mean(cimg[i][j], axis=0)
@@ -614,6 +615,7 @@ if __name__ == '__main__':
                 wr = np.sum(th0.transpose()[0]) / len(th0)
                 if len(dists) != 0:
                     print('x:{}, y:{}, width:{}, area ratio:{}, wrist ratio:{}'.format(i, j, np.nanmin(dists), ar, wr))
+                    dist_list[i][j] = np.nanmin(dists)
                 # blur_raw = np.multiply(blur_raw, mask_ft.astype(bool))
                 #
                 # # cv.fillPoly(mask_ft, [cnt], 1)
