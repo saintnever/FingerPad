@@ -522,6 +522,9 @@ if __name__ == '__main__':
                 if areas:
                     max_index = np.argmax(areas)
                     cnt = contours[max_index]
+                    x, y, w, h = cv.boundingRect(cnt)
+                    cv.rectangle(blur, (x, h), (w, y), (0, 255, 0), 3)
+
                     hull = cv.convexHull(cnt, returnPoints=False)
                     defects = cv.convexityDefects(cnt, hull)
                     starts = list()
@@ -575,8 +578,7 @@ if __name__ == '__main__':
                         dist = abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
                         if dist > 8 and dist < 40:
                             dists.append(dist)
-                    if len(dists) != 0:
-                        print('x:{}, y:{}, width:{}, area ratio:{}, wrist ratio:{}'.format(i,j,np.nanmin(dists), 0,0))
+
                     cv.line(blur, (c0, c1), (d0, d1), [255, 255, 255], 5)
                     # cv.drawContours(blur, cnt[hull], -1, (255, 255, 255), 2)
                     # Create a mask from the largest contour
@@ -602,8 +604,16 @@ if __name__ == '__main__':
                 cv.ellipse(blur, rrect, (255, 255, 255), 1, cv.LINE_AA)
                 # cv.drawContours(blur, [fit_points], -1, (255, 255, 255), 2)
                 mask_ft = np.zeros(th0.shape)
-                # cv.circle(mask_ft, (indextip0[1], indextip0[0]), 10, (255, 255, 255), -1)
+
                 mask_ft = np.multiply(mask_ft, mask)
+
+                # th0[indextip0[0]:] = 0
+                cv.circle(blur, (indextip0[1], indextip0[0]), 2, (255, 255, 255), -1)
+                # area ratio
+                ar = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose()))
+                wr = np.sum(th0.transpose()[0]) / len(th0)
+                if len(dists) != 0:
+                    print('x:{}, y:{}, width:{}, area ratio:{}, wrist ratio:{}'.format(i, j, np.nanmin(dists), ar, wr))
                 # blur_raw = np.multiply(blur_raw, mask_ft.astype(bool))
                 #
                 # # cv.fillPoly(mask_ft, [cnt], 1)
@@ -663,10 +673,10 @@ if __name__ == '__main__':
                 # plt.figure()
                 # fig, ([ax0, ax1]) = plt.subplots(1,2)
                 # ax0.imshow(blur, cmap='seismic')
-                # # ax1.imshow(th0_s, cmap='seismic')
+                # ax1.imshow(th0, cmap='seismic')
                 # plt.title(str(i) + '_' + str(j))
                 # plt.show()
-                #
+
                 # # Step #6e
                 # cv.line(blur, (indextip0[1], indextip0[0]), (x_intercept[-1], y_intercept[-1]), 0, 1)
 
