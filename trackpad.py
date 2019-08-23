@@ -227,7 +227,7 @@ def find_fingertip(wedge, ep_ind, framesize, indextip_prev):
         if dist > dmax:
             dmax = dist
             indextip = epind
-    return indextip
+    return (indextip[1], indextip[0])
 
 def branchPoints(skel):
     X=[]
@@ -463,17 +463,20 @@ if __name__ == '__main__':
 
         map = plt.figure()
         map_ax = map.add_subplot(111, projection='3d')
+        # map_ax = map.add_subplot(111)
         # map_ax = Axes3D(map)
         # map_ax.autoscale(enable=True, axis='both', tight=True)
 
         # # # Setting the axes properties
         map_ax.set_xlim3d([-10.0, 0.0])
+        # map_ax.set_xlim([-10.0, 0.0])
         map_ax.set_xlabel('x')
         map_ax.set_ylim3d([0.0, 10.0])
+        # map_ax.set_ylim([0.0, 10.0])
         map_ax.set_ylabel('y')
-        map_ax.set_zlim3d([0.0, 10.0])
+        map_ax.set_zlim3d([10.0, 0.0])
         map_ax.set_zlabel('z')
-        hl, = map_ax.plot3D([0], [0], [0],'o',markersize=2)
+        hl, = map_ax.plot([0], [0], [0], 'o',markersize=10)
 
         fgbg = cv.createBackgroundSubtractorMOG2(history=5, detectShadows=False)
         mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
@@ -503,6 +506,7 @@ if __name__ == '__main__':
                 row = i // 32
                 col = 31 - i % 32
                 img0[int(row)][int(col)] = x
+            img0[img0 < 160] = 0
             img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
             img0 = cv.flip(img0, 0)
 
@@ -527,11 +531,17 @@ if __name__ == '__main__':
             cv.rectangle(mask, (center[0], y), (x+w, y+h), 255, -1)
             # cv.fillPoly(mask_ft, [cnt], 1)
             defects = cv.convexityDefects(cnt, hull)
+            xmax = 0
+            p0 = 0
             for i in range(len(hull)):
+                if cnt[hull[i]][0][0][0] > xmax:
+                    xmax = cnt[hull[i]][0][0][0]
+                    p0 = tuple(cnt[hull[i]][0][0])
                 if i < len(hull) - 1:
                     cv.line(blur0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[i + 1]][0][0]), [255, 255, 255], 2)
                 else:
                     cv.line(blur0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[0]][0][0]), [255, 255, 255], 2)
+            # indextip0 = p0
             # get max defect distance and finger line
             starts = list()
             ends = list()
@@ -560,9 +570,14 @@ if __name__ == '__main__':
                     p2 = end
                 if d > distmax:
                     distmax = d
-            # for cp in cnt:
-            #     if cp[0][0] == p1[0] and cp[0][1] > p1[1]:
-            #         indextip0 = cp[0]
+            # indextips = list()
+            idy = 0
+            for cp in cnt:
+                if abs(cp[0][0] - p0[0]) < 10 and cp[0][1] > p0[1]:
+                    if cp[0][1] > idy:
+                        idy = cp[0][1]
+                        indextip0 = cp[0]
+
             cv.line(blur0, p1, p2, [255, 255, 255], 1)
             c0, c1, d0, d1 = getPerpCoord(p1[0], p1[1], p2[0], p2[1], 50)
             tmp = np.zeros_like(blur0, np.uint8)
@@ -585,15 +600,15 @@ if __name__ == '__main__':
             th0_s = morphology.skeletonize(th0)
             im4.set_array(th0_s)
 
-            ep0 = endPoints(th0_s)
-            ep0_ind = np.where(ep0 == 1)
-            if len(ep0_ind[0]) > 1:
-                indextip0 = find_fingertip(4, ep0_ind, re_size, indextip0_prev)
-            else:
-                indextip0 = indextip0_prev
+            # ep0 = endPoints(th0_s)
+            # ep0_ind = np.where(ep0 == 1)
+            # if len(ep0_ind[0]) > 1:
+            #     indextip0 = find_fingertip(4, ep0_ind, re_size, indextip0_prev)
+            # else:
+            #     indextip0 = indextip0_prev
 
             indextip0 = getfingertip_q(q_ft, indextip0)
-            th0[indextip0[0]:] = 0
+            th0[indextip0[1]:] = 0
             # for i, item in enumerate(th0):
             #     th0[i][:center[1]] = 0
             # th0 = np.multiply(th0, mask)
@@ -607,7 +622,7 @@ if __name__ == '__main__':
             print('finger width:{0:.3f}, maxDefect:{1:.3f}, area ratio:{2:.3f}, wrist ratio:{3:.3f}'.format(fw, distmax,
                                                                                                             ar, wr))
             indextip0_prev = indextip0
-            blur0 = cv.circle(blur0, (indextip0[1], indextip0[0]), 10, (0, 127, 255), -1)
+            blur0 = cv.circle(blur0, indextip0, 10, (127, 127, 255), -1)
             im0.set_array(blur0)
             # 3D plot
             x_tp = -map_def(ar, 100, 400, 0, 10)
