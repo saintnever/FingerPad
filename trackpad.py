@@ -17,6 +17,7 @@ from skimage import morphology, data
 from skimage.util import invert
 from scipy import ndimage, spatial
 from mahotas.morph import hitmiss
+from mpl_toolkits.mplot3d import Axes3D
 
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
@@ -425,15 +426,24 @@ def getPerpCoord(aX, aY, bX, bY, length):
     dY = pY - vY * length
     return int(cX), int(cY), int(dX), int(dY)
 
+def getfingertip_q(q, p):
+    q.append(p)
+    lq = list(q)
+    x=0
+    y=0
+    for item in lq:
+        x += item[0]
+        y += item[1]
+    return (int(x / len(lq)), int(y / len(lq)))
 
 q0 = queue.Queue()
 q1 = queue.Queue()
 stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM16')
+data_reader0 = SerialReader(stop_event, q0, 'COM17')
 data_reader0.start()
 # data_reader1 = SerialReader(stop_event, q1, 'COM18')
 # data_reader1.start()
-re_size = (24*5, 32*5)
+re_size = (24*10, 32*10)
 
 if __name__ == '__main__':
     try:
@@ -450,11 +460,26 @@ if __name__ == '__main__':
         im5 = ax5.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
         plt.tight_layout()
         plt.ion()
+
+        map = plt.figure()
+        map_ax = map.add_subplot(111, projection='3d')
+        # map_ax = Axes3D(map)
+        # map_ax.autoscale(enable=True, axis='both', tight=True)
+
+        # # # Setting the axes properties
+        map_ax.set_xlim3d([-10.0, 0.0])
+        map_ax.set_xlabel('x')
+        map_ax.set_ylim3d([0.0, 10.0])
+        map_ax.set_ylabel('y')
+        map_ax.set_zlim3d([0.0, 10.0])
+        map_ax.set_zlabel('z')
+        hl, = map_ax.plot3D([0], [0], [0],'o',markersize=2)
+
         fgbg = cv.createBackgroundSubtractorMOG2(history=5, detectShadows=False)
         mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
         cnt = 0
-        # mlen = 10
-        # bg_queue = deque(maxlen=mlen)
+        mlen = 4
+        q_ft = deque(maxlen=5)
         indextip0 = [0, 0]
         indextip1 = [0, 0]
         indextip0_prev = [0, 0]
@@ -470,6 +495,7 @@ if __name__ == '__main__':
         temp0_bg = [0] * 768
         temp1_bg = [0] * 768
         while True:
+            # print(time.time())
             time0, temp0 = q0.get()
             temp0 = colorscale(temp0, np.min(temp0), np.max(temp0))
             img0 = np.array([[0] * 32 for _ in range(24)], np.uint8)
@@ -534,6 +560,9 @@ if __name__ == '__main__':
                     p2 = end
                 if d > distmax:
                     distmax = d
+            # for cp in cnt:
+            #     if cp[0][0] == p1[0] and cp[0][1] > p1[1]:
+            #         indextip0 = cp[0]
             cv.line(blur0, p1, p2, [255, 255, 255], 1)
             c0, c1, d0, d1 = getPerpCoord(p1[0], p1[1], p2[0], p2[1], 50)
             tmp = np.zeros_like(blur0, np.uint8)
@@ -552,12 +581,8 @@ if __name__ == '__main__':
                     dists.append(dist)
 
             cv.line(blur0, (c0, c1), (d0, d1), [255, 255, 255], 2)
-
-
             th0 = th0.astype(np.bool)
-
             th0_s = morphology.skeletonize(th0)
-
             im4.set_array(th0_s)
 
             ep0 = endPoints(th0_s)
@@ -567,6 +592,7 @@ if __name__ == '__main__':
             else:
                 indextip0 = indextip0_prev
 
+            indextip0 = getfingertip_q(q_ft, indextip0)
             th0[indextip0[0]:] = 0
             # for i, item in enumerate(th0):
             #     th0[i][:center[1]] = 0
@@ -581,8 +607,16 @@ if __name__ == '__main__':
             print('finger width:{0:.3f}, maxDefect:{1:.3f}, area ratio:{2:.3f}, wrist ratio:{3:.3f}'.format(fw, distmax,
                                                                                                             ar, wr))
             indextip0_prev = indextip0
-            blur0 = cv.circle(blur0, (indextip0[1], indextip0[0]), 5, (0, 127, 255), -1)
+            blur0 = cv.circle(blur0, (indextip0[1], indextip0[0]), 10, (0, 127, 255), -1)
             im0.set_array(blur0)
+            # 3D plot
+            x_tp = -map_def(ar, 100, 400, 0, 10)
+            y_tp = map_def(indextip0[0], 0, re_size[0], 0, 10)
+            z_tp = map_def(indextip0[1], 0, re_size[1], 0, 10)
+            print(x_tp, y_tp, z_tp)
+            hl.set_data(x_tp, y_tp)
+            hl.set_3d_properties(z_tp)
+
             plt.pause(0.001)
     # except KeyboardInterrupt:
     #     cv.imwrite('./fingertip.jpg', img0)
