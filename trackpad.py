@@ -426,14 +426,14 @@ def getPerpCoord(aX, aY, bX, bY, length):
     dY = pY - vY * length
     return int(cX), int(cY), int(dX), int(dY)
 
-def getfingertip_q(q, p):
+def getfingertip_q(q, p, weights):
     q.append(p)
     lq = list(q)
     x=0
     y=0
-    for item in lq:
-        x += item[0]
-        y += item[1]
+    for i, item in enumerate(lq):
+        x += item[0] * weights[i] / np.sum(weights)
+        y += item[1] * weights[i] / np.sum(weights)
     return (int(x / len(lq)), int(y / len(lq)))
 
 q0 = queue.Queue()
@@ -482,7 +482,9 @@ if __name__ == '__main__':
         mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
         cnt = 0
         mlen = 4
-        q_ft = deque(maxlen=5)
+        q_ft = deque(maxlen=mlen)
+        q_ar = deque(maxlen=mlen)
+        q_temp = deque(maxlen=mlen)
         indextip0 = [0, 0]
         indextip1 = [0, 0]
         indextip0_prev = [0, 0]
@@ -497,16 +499,26 @@ if __name__ == '__main__':
         cal_cnt = 30
         temp0_bg = [0] * 768
         temp1_bg = [0] * 768
+        timestamp_prev = 0
+        dtime = 0
+        fullar_prev = 0
         while True:
             # print(time.time())
-            time0, temp0 = q0.get()
+            time0, temp_raw = q0.get()
+            dtime = time0-timestamp_prev
+            timestamp_prev = time0
+            q_temp.append(temp_raw)
+            if len(list(q_temp)) > 4:
+                temp0 = np.average(np.array(q_temp), weights=range(1, mlen+1), axis=0)
+            else:
+                temp0 = temp_raw
             temp0 = colorscale(temp0, np.min(temp0), np.max(temp0))
             img0 = np.array([[0] * 32 for _ in range(24)], np.uint8)
             for i, x in enumerate(temp0):
                 row = i // 32
                 col = 31 - i % 32
                 img0[int(row)][int(col)] = x
-            img0[img0 < 160] = 0
+            img0[img0 < 140] = 0
             img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
             img0 = cv.flip(img0, 0)
 
@@ -576,7 +588,7 @@ if __name__ == '__main__':
                 if abs(cp[0][0] - p0[0]) < 10 and cp[0][1] > p0[1]:
                     if cp[0][1] > idy:
                         idy = cp[0][1]
-                        indextip0 = cp[0]
+                        indextip0 = tuple(cp[0])
 
             cv.line(blur0, p1, p2, [255, 255, 255], 1)
             c0, c1, d0, d1 = getPerpCoord(p1[0], p1[1], p2[0], p2[1], 50)
@@ -607,28 +619,41 @@ if __name__ == '__main__':
             # else:
             #     indextip0 = indextip0_prev
 
-            indextip0 = getfingertip_q(q_ft, indextip0)
+            # indextip0 = cp[0] getfingertip_q(q_ft, indextip0, weights=range(1, mlen+1))
+            wr = np.sum(th0.transpose()[0]) / len(th0)
+            ar_full = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 100
             th0[indextip0[1]:] = 0
             # for i, item in enumerate(th0):
             #     th0[i][:center[1]] = 0
             # th0 = np.multiply(th0, mask)
-
             im2.set_array(th0)
-            ar = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose()))*1000
-            wr = np.sum(th0.transpose()[0]) / len(th0)
+            ar = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 100
+
+            q_ar.append(ar)
+            # if len(list(q_ar)) == mlen:
+            #     ar = np.average(list(q_ar), weights=range(1, mlen+1), axis=0)
+            dtime = 1
+            v_lift = (indextip0[1] - indextip0_prev[1]) / dtime
+            v_ar = (ar_full - fullar_prev) / dtime
+            fullar_prev = ar_full
             fw = 0
             if len(dists) != 0:
                 fw = np.nanmin(dists)
-            print('finger width:{0:.3f}, maxDefect:{1:.3f}, area ratio:{2:.3f}, wrist ratio:{3:.3f}'.format(fw, distmax,
-                                                                                                            ar, wr))
+            # print('finger width:{0:.3f}, maxDefect:{1:.3f}, area ratio:{2:.3f}, full ar:{3:.3f}, wrist ratio:{4:.3f}'.format(fw, distmax,
+            #                                                                                                 ar, ar_full, wr))
+            print('area ratio:{0:.3f}, full ar:{1:.3f}, v-lift:{2:.3f}, v-ar:{3:.3f}'.format(ar, ar_full, v_lift, v_ar))
+            if v_lift < -20 and abs(v_ar) < 5:
+                print('LIFT')
+            elif v_lift > 20 and abs(v_ar) < 5:
+                print('PUT DOWN!')
             indextip0_prev = indextip0
             blur0 = cv.circle(blur0, indextip0, 10, (127, 127, 255), -1)
             im0.set_array(blur0)
             # 3D plot
-            x_tp = -map_def(ar, 100, 400, 0, 10)
+            x_tp = -map_def(ar, 10, 40, 0, 10)
             y_tp = map_def(indextip0[0], 0, re_size[0], 0, 10)
             z_tp = map_def(indextip0[1], 0, re_size[1], 0, 10)
-            print(x_tp, y_tp, z_tp)
+            # print(x_tp, y_tp, z_tp)
             hl.set_data(x_tp, y_tp)
             hl.set_3d_properties(z_tp)
 
