@@ -436,10 +436,20 @@ def getfingertip_q(q, p, weights):
         y += item[1] * weights[i] / np.sum(weights)
     return (int(x / len(lq)), int(y / len(lq)))
 
+def log_transform(a):
+    sign = a / abs(a)
+    return np.log2(abs(a)) * sign
+
+def distance(point1, point2=None):
+    if point2 is not None:
+        return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+    else:
+        return math.sqrt(point1[0] ** 2 + point1[1] ** 2)
+
 q0 = queue.Queue()
 q1 = queue.Queue()
 stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM17')
+data_reader0 = SerialReader(stop_event, q0, 'COM16')
 data_reader0.start()
 # data_reader1 = SerialReader(stop_event, q1, 'COM18')
 # data_reader1.start()
@@ -461,27 +471,23 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.ion()
 
-        map = plt.figure()
-        map_ax = map.add_subplot(111, projection='3d')
-        # map_ax = map.add_subplot(111)
-        # map_ax = Axes3D(map)
-        # map_ax.autoscale(enable=True, axis='both', tight=True)
+        # map = plt.figure()
+        # map_ax = map.add_subplot(111, projection='3d')
+        # #  Setting the axes properties
+        # map_ax.set_xlim3d([0.0, 10.0])
+        # # map_ax.set_xlim([-10.0, 0.0])
+        # map_ax.set_xlabel('x')
+        # map_ax.set_ylim3d([0.0, 10.0])
+        # # map_ax.set_ylim([0.0, 10.0])
+        # map_ax.set_ylabel('y')
+        # map_ax.set_zlim3d([10.0, 0.0])
+        # map_ax.set_zlabel('z')
+        # hl, = map_ax.plot([0], [0], [0], 'o',markersize=10)
 
-        # # # Setting the axes properties
-        map_ax.set_xlim3d([-10.0, 0.0])
-        # map_ax.set_xlim([-10.0, 0.0])
-        map_ax.set_xlabel('x')
-        map_ax.set_ylim3d([0.0, 10.0])
-        # map_ax.set_ylim([0.0, 10.0])
-        map_ax.set_ylabel('y')
-        map_ax.set_zlim3d([10.0, 0.0])
-        map_ax.set_zlabel('z')
-        hl, = map_ax.plot([0], [0], [0], 'o',markersize=10)
-
-        fgbg = cv.createBackgroundSubtractorMOG2(history=5, detectShadows=False)
+        # fgbg = cv.createBackgroundSubtractorMOG2(history=5, detectShadows=False)
         mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
         cnt = 0
-        mlen = 4
+        mlen = 1
         q_ft = deque(maxlen=mlen)
         q_ar = deque(maxlen=mlen)
         q_temp = deque(maxlen=mlen)
@@ -502,13 +508,16 @@ if __name__ == '__main__':
         timestamp_prev = 0
         dtime = 0
         fullar_prev = 0
+        par_prev = 0
+        lift_flag = 0
+        hp = 0
         while True:
             # print(time.time())
             time0, temp_raw = q0.get()
             dtime = time0-timestamp_prev
             timestamp_prev = time0
             q_temp.append(temp_raw)
-            if len(list(q_temp)) > 4:
+            if len(list(q_temp)) == mlen:
                 temp0 = np.average(np.array(q_temp), weights=range(1, mlen+1), axis=0)
             else:
                 temp0 = temp_raw
@@ -518,14 +527,17 @@ if __name__ == '__main__':
                 row = i // 32
                 col = 31 - i % 32
                 img0[int(row)][int(col)] = x
-            img0[img0 < 140] = 0
+            img0[img0 < 150] = 0
             img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
             img0 = cv.flip(img0, 0)
 
             # blur, opening, and erode
-            blur0 = cv.GaussianBlur(img0, (25, 25), 0)
-
-            ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+            # kernelo = cv.getStructuringElement(cv.MORPH_ELLIPSE, (15, 15))
+            # img0 = cv.morphologyEx(img0, cv.MORPH_OPEN, kernelo)
+            # kerneld = cv.getStructuringElement(cv.MORPH_ELLIPSE, (11,11))
+            # img0 = cv.erode(img0, kerneld)
+            blur0 = cv.GaussianBlur(img0, (31, 31), 0)
+            ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
 
             contours, hierarchy = cv.findContours(th0, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
 
@@ -542,72 +554,117 @@ if __name__ == '__main__':
             mask = np.zeros_like(blur0)
             cv.rectangle(mask, (center[0], y), (x+w, y+h), 255, -1)
             # cv.fillPoly(mask_ft, [cnt], 1)
-            defects = cv.convexityDefects(cnt, hull)
+            # defects = cv.convexityDefects(cnt, hull)
             xmax = 0
+            ymin = 10000
+            xmin = 10000
             p0 = 0
+            ifp = 0
+            ph = 0
+            iwb = 0
+            temp0 = np.zeros_like(blur0)
             for i in range(len(hull)):
+                # cv.circle(temp0, tuple(cnt[hull[i]][0][0]), 10, (127, 255, 255), -1)
+
                 if cnt[hull[i]][0][0][0] > xmax:
                     xmax = cnt[hull[i]][0][0][0]
                     p0 = tuple(cnt[hull[i]][0][0])
+                    ifp = i
+                if cnt[hull[i]][0][0][1] < ymin:
+                    ymin = cnt[hull[i]][0][0][1]
+                    ph = tuple(cnt[hull[i]][0][0])
+                if cnt[hull[i]][0][0][0] <= xmin:
+                    if cnt[hull[i]][0][0][0] == xmin:
+                        if cnt[hull[i]][0][0][1] > cnt[hull[iwb]][0][0][1]:
+                            iwb = i
+                    xmin = cnt[hull[i]][0][0][0]
+                    iwb = i-1
                 if i < len(hull) - 1:
-                    cv.line(blur0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[i + 1]][0][0]), [255, 255, 255], 2)
+                    cv.line(temp0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[i + 1]][0][0]), [127, 255, 255], 3)
                 else:
-                    cv.line(blur0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[0]][0][0]), [255, 255, 255], 2)
-            # indextip0 = p0
-            # get max defect distance and finger line
-            starts = list()
-            ends = list()
-            ymin = 1000
-            xmax = 0
-            distmax = 0
-            p1 = 0
-            p2 = 0
-            for l in range(defects.shape[0]):
-                s, e, f, d = defects[l, 0]
-                start = tuple(cnt[s][0])
-                end = tuple(cnt[e][0])
-                far = tuple(cnt[f][0])
-                cv.circle(blur0, far, 2, (255, 255, 255), -1)
-                if start[0] > xmax:
-                    xmax = start[0]
-                    p1 = start
-                if start[1] < ymin:
-                    ymin = start[1]
-                    p2 = start
-                if end[0] > xmax:
-                    xmax = end[0]
-                    p1 = end
-                if end[1] < ymin:
-                    ymin = end[1]
-                    p2 = end
-                if d > distmax:
-                    distmax = d
-            # indextips = list()
+                    cv.line(temp0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[0]][0][0]), [127, 255, 255], 3)
+            pb = (0,0)
+            pwb = tuple(cnt[hull[iwb]][0][0])
+            phb = (0,0)
+            for i in range(len(hull)):
+                phb = tuple(cnt[hull[iwb - i]][0][0])
+                if distance(pwb, phb) > 30:
+                    break
+            slope_wp = (phb[1] - pwb[1]) / (phb[0] - pwb[0])
+
+            for i in range(len(hull)):
+                pb = tuple(cnt[hull[ifp+i]][0][0])
+                if distance(p0, pb) > 30:
+                    break
+            slope_fp = (p0[1] - pb[1]) / (p0[0] - pb[0])
+            # print(slope_wp, slope_fp, slope_wp-slope_fp)
+            cv.circle(temp0, p0, 10, (127, 255, 255), -1)
+            cv.circle(temp0, pb, 10, (127, 255, 255), -1)
+            cv.circle(temp0, pwb, 10, (127, 255, 255), -1)
+            cv.circle(temp0, phb, 10, (127, 255, 255), -1)
+            rect = cv.minAreaRect(cnt)
+            box = cv.boxPoints(rect)
+            box = np.int0(box)
+            cv.drawContours(temp0, [box], 0, (127, 0, 255), 2)
+            # cv.rectangle(temp0, (int(x-w/2), y), (int(x+w), y+h), 255, 2)
+
+            im1.set_array(temp0)
             idy = 0
             for cp in cnt:
                 if abs(cp[0][0] - p0[0]) < 10 and cp[0][1] > p0[1]:
                     if cp[0][1] > idy:
                         idy = cp[0][1]
                         indextip0 = tuple(cp[0])
+            # indextip0 = p0
+            # # get max defect distance and finger line
+            # starts = list()
+            # ends = list()
+            # ymin = 1000
+            # xmax = 0
+            # distmax = 0
+            # p1 = 0
+            # p2 = 0
+            # for l in range(defects.shape[0]):
+            #     s, e, f, d = defects[l, 0]
+            #     start = tuple(cnt[s][0])
+            #     end = tuple(cnt[e][0])
+            #     far = tuple(cnt[f][0])
+            #     cv.circle(blur0, far, 2, (255, 255, 255), -1)
+            #     if start[0] > xmax:
+            #         xmax = start[0]
+            #         p1 = start
+            #     if start[1] < ymin:
+            #         ymin = start[1]
+            #         p2 = start
+            #     if end[0] > xmax:
+            #         xmax = end[0]
+            #         p1 = end
+            #     if end[1] < ymin:
+            #         ymin = end[1]
+            #         p2 = end
+            #     if d > distmax:
+            #         distmax = d
+            # # indextips = list()
 
-            cv.line(blur0, p1, p2, [255, 255, 255], 1)
-            c0, c1, d0, d1 = getPerpCoord(p1[0], p1[1], p2[0], p2[1], 50)
-            tmp = np.zeros_like(blur0, np.uint8)
-            cv.line(tmp, (c0, c1), (d0, d1), [255, 255, 255], 2)
-            ref = np.zeros_like(blur0, np.uint8)
-            ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
-            # Step #6d
-            (x_intercept, y_intercept) = np.nonzero(np.logical_and(tmp, ref))
-            p1 = np.array(p1)
-            p2 = np.array(p2)
-            for m in range(len(x_intercept)):
-                p3 = np.array([y_intercept[m], x_intercept[m]])
-                cv.circle(blur0, tuple(p3), 2, (0, 255, 255), -1)
-                dist = abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
-                if dist > 8 and dist < 40:
-                    dists.append(dist)
 
-            cv.line(blur0, (c0, c1), (d0, d1), [255, 255, 255], 2)
+            # cv.line(blur0, p1, p2, [255, 255, 255], 1)
+            # c0, c1, d0, d1 = getPerpCoord(p1[0], p1[1], p2[0], p2[1], 50)
+            # tmp = np.zeros_like(blur0, np.uint8)
+            # cv.line(tmp, (c0, c1), (d0, d1), [255, 255, 255], 1)
+            # ref = np.zeros_like(blur0, np.uint8)
+            # ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
+            # # Step #6d
+            # (x_intercept, y_intercept) = np.nonzero(np.logical_and(tmp, ref))
+            # p1 = np.array(p1)
+            # p2 = np.array(p2)
+            # for m in range(len(x_intercept)):
+            #     p3 = np.array([y_intercept[m], x_intercept[m]])
+            #     cv.circle(blur0, tuple(p3), 2, (0, 255, 255), -1)
+            #     dist = abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
+            #     if dist > 8 and dist < 40:
+            #         dists.append(dist)
+            #
+            # cv.line(blur0, (c0, c1), (d0, d1), [255, 255, 255], 2)
             th0 = th0.astype(np.bool)
             th0_s = morphology.skeletonize(th0)
             im4.set_array(th0_s)
@@ -621,41 +678,61 @@ if __name__ == '__main__':
 
             # indextip0 = cp[0] getfingertip_q(q_ft, indextip0, weights=range(1, mlen+1))
             wr = np.sum(th0.transpose()[0]) / len(th0)
-            ar_full = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 100
+            ar_full = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
+
             th0[indextip0[1]:] = 0
             # for i, item in enumerate(th0):
             #     th0[i][:center[1]] = 0
             # th0 = np.multiply(th0, mask)
             im2.set_array(th0)
-            ar = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 100
+            ar = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
 
-            q_ar.append(ar)
+            # q_ar.append(ar)
             # if len(list(q_ar)) == mlen:
             #     ar = np.average(list(q_ar), weights=range(1, mlen+1), axis=0)
-            dtime = 1
+            # dtime = 1
+            v_x = (indextip0[0] - indextip0_prev[0]) / dtime
             v_lift = (indextip0[1] - indextip0_prev[1]) / dtime
-            v_ar = (ar_full - fullar_prev) / dtime
-            fullar_prev = ar_full
+            v_far = (ar_full - fullar_prev) / dtime
+            v_par = (ar - par_prev) / dtime
+            # v_x = log_transform(v_x)
+            # v_lift = log_transform(v_lift)
+            # v_far = log_transform(v_far)
+            # v_par = log_transform(v_par)
+
             fw = 0
             if len(dists) != 0:
                 fw = np.nanmin(dists)
             # print('finger width:{0:.3f}, maxDefect:{1:.3f}, area ratio:{2:.3f}, full ar:{3:.3f}, wrist ratio:{4:.3f}'.format(fw, distmax,
             #                                                                                                 ar, ar_full, wr))
-            print('area ratio:{0:.3f}, full ar:{1:.3f}, v-lift:{2:.3f}, v-ar:{3:.3f}'.format(ar, ar_full, v_lift, v_ar))
-            if v_lift < -20 and abs(v_ar) < 5:
-                print('LIFT')
-            elif v_lift > 20 and abs(v_ar) < 5:
-                print('PUT DOWN!')
+            if slope_wp-slope_fp > 1.2:
+                if lift_flag == 0:
+                    print('LIFT')
+                    lift_flag = 1
+            elif slope_wp-slope_fp < 0.8:
+                if lift_flag == 1:
+                    print('PUT DOWN!')
+                    hp = indextip0[1]-ph[1]
+                    lift_flag = 0
+
+            dr = (hp-(indextip0[1]-ph[1]))/(indextip0[1]-ph[1])
+
+            fullar_prev = ar_full
+            par_prev = ar
             indextip0_prev = indextip0
-            blur0 = cv.circle(blur0, indextip0, 10, (127, 127, 255), -1)
+            d_est = (60*216.7)/(indextip0[1]-ph[1])
+            print('Lift FLAG:{0}, par:{1:.3f}, far:{2:.3f}, vx:{3:.3f}, vy:{4:.3f}, v-par:{5:.3f}, v-far:{6:.3f}, distance:{7:.3f}'.
+                  format(lift_flag, ar, ar_full, v_x, v_lift, v_par, v_far, dr))
+
+            blur0 = cv.circle(blur0, tuple(indextip0), 10, (127, 127, 255), -1)
             im0.set_array(blur0)
             # 3D plot
-            x_tp = -map_def(ar, 10, 40, 0, 10)
-            y_tp = map_def(indextip0[0], 0, re_size[0], 0, 10)
-            z_tp = map_def(indextip0[1], 0, re_size[1], 0, 10)
-            # print(x_tp, y_tp, z_tp)
-            hl.set_data(x_tp, y_tp)
-            hl.set_3d_properties(z_tp)
+            # x_tp = map_def(d_est, 80, 160, 0, 10)
+            # y_tp = map_def(indextip0[0], 0, re_size[0], 0, 10)
+            # z_tp = map_def(indextip0[1], 0, re_size[1], 0, 10)
+            # # print(x_tp, y_tp, z_tp)
+            # hl.set_data(x_tp, y_tp)
+            # hl.set_3d_properties(z_tp)
 
             plt.pause(0.001)
     # except KeyboardInterrupt:

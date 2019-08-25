@@ -523,10 +523,14 @@ if __name__ == '__main__':
                 if areas:
                     max_index = np.argmax(areas)
                     cnt = contours[max_index]
+                    # print(cnt)
+
                     x, y, w, h = cv.boundingRect(cnt)
                     cv.rectangle(blur, (x, h), (w, y), (0, 255, 0), 3)
 
-                    hull = cv.convexHull(cnt, returnPoints=False)
+                    hull = cv.convexHull(cnt, returnPoints=True)
+                    print(hull)
+                    break
                     defects = cv.convexityDefects(cnt, hull)
                     starts = list()
                     ends = list()
