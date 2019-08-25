@@ -138,6 +138,9 @@ def constrain(val, min_val, max_val):
     min_array.fill(min_val)
     return np.minimum(max_array, np.maximum(min_array, val))
 
+def confine(val, min_val, max_val):
+    return min(max_val, max(val, min_val))
+
 def image_filter(img):
     fimg = np.array(img, np.float)
     t_max = np.amax(fimg)
@@ -471,23 +474,23 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.ion()
 
-        # map = plt.figure()
-        # map_ax = map.add_subplot(111, projection='3d')
-        # #  Setting the axes properties
+        map = plt.figure()
+        map_ax = map.add_subplot(111)
+        #  Setting the axes properties
         # map_ax.set_xlim3d([0.0, 10.0])
-        # # map_ax.set_xlim([-10.0, 0.0])
-        # map_ax.set_xlabel('x')
+        map_ax.set_xlim([0.0, 10.0])
+        map_ax.set_xlabel('x')
         # map_ax.set_ylim3d([0.0, 10.0])
-        # # map_ax.set_ylim([0.0, 10.0])
-        # map_ax.set_ylabel('y')
+        map_ax.set_ylim([0.0, 10.0])
+        map_ax.set_ylabel('y')
         # map_ax.set_zlim3d([10.0, 0.0])
         # map_ax.set_zlabel('z')
-        # hl, = map_ax.plot([0], [0], [0], 'o',markersize=10)
+        hl, = map_ax.plot([0], [0], 'o',markersize=10)
 
         # fgbg = cv.createBackgroundSubtractorMOG2(history=5, detectShadows=False)
         mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
         cnt = 0
-        mlen = 1
+        mlen = 3
         q_ft = deque(maxlen=mlen)
         q_ar = deque(maxlen=mlen)
         q_temp = deque(maxlen=mlen)
@@ -510,7 +513,12 @@ if __name__ == '__main__':
         fullar_prev = 0
         par_prev = 0
         lift_flag = 0
-        hp = 0
+        xcur = 5
+        ycur = 5
+        xcur_prev = 5
+        ycur_prev =1
+        hp = 5
+        yp = 5
         while True:
             # print(time.time())
             time0, temp_raw = q0.get()
@@ -588,13 +596,13 @@ if __name__ == '__main__':
             phb = (0,0)
             for i in range(len(hull)):
                 phb = tuple(cnt[hull[iwb - i]][0][0])
-                if distance(pwb, phb) > 30:
+                if distance(pwb, phb) > 40:
                     break
             slope_wp = (phb[1] - pwb[1]) / (phb[0] - pwb[0])
 
             for i in range(len(hull)):
                 pb = tuple(cnt[hull[ifp+i]][0][0])
-                if distance(p0, pb) > 30:
+                if distance(p0, pb) > 40:
                     break
             slope_fp = (p0[1] - pb[1]) / (p0[0] - pb[0])
             # print(slope_wp, slope_fp, slope_wp-slope_fp)
@@ -608,75 +616,17 @@ if __name__ == '__main__':
             cv.drawContours(temp0, [box], 0, (127, 0, 255), 2)
             # cv.rectangle(temp0, (int(x-w/2), y), (int(x+w), y+h), 255, 2)
 
-            im1.set_array(temp0)
             idy = 0
             for cp in cnt:
                 if abs(cp[0][0] - p0[0]) < 10 and cp[0][1] > p0[1]:
                     if cp[0][1] > idy:
                         idy = cp[0][1]
                         indextip0 = tuple(cp[0])
-            # indextip0 = p0
-            # # get max defect distance and finger line
-            # starts = list()
-            # ends = list()
-            # ymin = 1000
-            # xmax = 0
-            # distmax = 0
-            # p1 = 0
-            # p2 = 0
-            # for l in range(defects.shape[0]):
-            #     s, e, f, d = defects[l, 0]
-            #     start = tuple(cnt[s][0])
-            #     end = tuple(cnt[e][0])
-            #     far = tuple(cnt[f][0])
-            #     cv.circle(blur0, far, 2, (255, 255, 255), -1)
-            #     if start[0] > xmax:
-            #         xmax = start[0]
-            #         p1 = start
-            #     if start[1] < ymin:
-            #         ymin = start[1]
-            #         p2 = start
-            #     if end[0] > xmax:
-            #         xmax = end[0]
-            #         p1 = end
-            #     if end[1] < ymin:
-            #         ymin = end[1]
-            #         p2 = end
-            #     if d > distmax:
-            #         distmax = d
-            # # indextips = list()
 
-
-            # cv.line(blur0, p1, p2, [255, 255, 255], 1)
-            # c0, c1, d0, d1 = getPerpCoord(p1[0], p1[1], p2[0], p2[1], 50)
-            # tmp = np.zeros_like(blur0, np.uint8)
-            # cv.line(tmp, (c0, c1), (d0, d1), [255, 255, 255], 1)
-            # ref = np.zeros_like(blur0, np.uint8)
-            # ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
-            # # Step #6d
-            # (x_intercept, y_intercept) = np.nonzero(np.logical_and(tmp, ref))
-            # p1 = np.array(p1)
-            # p2 = np.array(p2)
-            # for m in range(len(x_intercept)):
-            #     p3 = np.array([y_intercept[m], x_intercept[m]])
-            #     cv.circle(blur0, tuple(p3), 2, (0, 255, 255), -1)
-            #     dist = abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
-            #     if dist > 8 and dist < 40:
-            #         dists.append(dist)
-            #
-            # cv.line(blur0, (c0, c1), (d0, d1), [255, 255, 255], 2)
             th0 = th0.astype(np.bool)
             th0_s = morphology.skeletonize(th0)
             im4.set_array(th0_s)
 
-            # ep0 = endPoints(th0_s)
-            # ep0_ind = np.where(ep0 == 1)
-            # if len(ep0_ind[0]) > 1:
-            #     indextip0 = find_fingertip(4, ep0_ind, re_size, indextip0_prev)
-            # else:
-            #     indextip0 = indextip0_prev
-
-            # indextip0 = cp[0] getfingertip_q(q_ft, indextip0, weights=range(1, mlen+1))
             wr = np.sum(th0.transpose()[0]) / len(th0)
             ar_full = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
 
@@ -699,7 +649,7 @@ if __name__ == '__main__':
             # v_lift = log_transform(v_lift)
             # v_far = log_transform(v_far)
             # v_par = log_transform(v_par)
-
+            dr = 0
             fw = 0
             if len(dists) != 0:
                 fw = np.nanmin(dists)
@@ -709,31 +659,51 @@ if __name__ == '__main__':
                 if lift_flag == 0:
                     print('LIFT')
                     lift_flag = 1
+                    xcur_prev = xcur
+                    ycur_prev = ycur
             elif slope_wp-slope_fp < 0.8:
-                if lift_flag == 1:
-                    print('PUT DOWN!')
-                    hp = indextip0[1]-ph[1]
-                    lift_flag = 0
-
-            dr = (hp-(indextip0[1]-ph[1]))/(indextip0[1]-ph[1])
+                dmax = 0
+                for i in range(len(hull)):
+                    ptmp = np.array(cnt[hull[i]][0][0])
+                    dist = abs(np.cross(np.array(pwb) - np.array(indextip0), np.array(indextip0) - ptmp) /
+                               np.linalg.norm(np.array(pwb) - np.array(indextip0)))
+                    if dist > dmax:
+                        dmax = dist
+                        ph = tuple(ptmp)
+                cv.circle(temp0, ph, 12, (127, 255, 255), -1)
+                if 10 < ph[0] and indextip0[0] < re_size[0] - 3:
+                    if lift_flag == 1:
+                        print('PUT DOWN!')
+                        hp = dmax
+                        lift_flag = 0
+                        yp = indextip0[0]
+                    else:
+                        dr = (hp - dmax) / dmax
+                        xcur = dr*20 + xcur_prev
+                        ycur = 20*(indextip0[0] - yp)/re_size[0] + ycur_prev
+                        # x_tp = xcur
+                        # y_tp = ycur
+                        xcur = confine(xcur, 0, 10)
+                        ycur = confine(ycur, 0, 10)
+            im1.set_array(temp0)
 
             fullar_prev = ar_full
             par_prev = ar
             indextip0_prev = indextip0
-            d_est = (60*216.7)/(indextip0[1]-ph[1])
-            print('Lift FLAG:{0}, par:{1:.3f}, far:{2:.3f}, vx:{3:.3f}, vy:{4:.3f}, v-par:{5:.3f}, v-far:{6:.3f}, distance:{7:.3f}'.
-                  format(lift_flag, ar, ar_full, v_x, v_lift, v_par, v_far, dr))
+            # d_est = (60*216.7)/(indextip0[1]-ph[1])
+            # d_est = dr*indextip0[1] + indextip0[1]
+            # print('Lift FLAG:{0}, par:{1:.3f}, far:{2:.3f}, vx:{3:.3f}, vy:{4:.3f}, v-par:{5:.3f}, v-far:{6:.3f}, distance:{7:.3f}'.
+            #       format(lift_flag, ar, ar_full, v_x, v_lift, v_par, v_far, dr))
 
             blur0 = cv.circle(blur0, tuple(indextip0), 10, (127, 127, 255), -1)
             im0.set_array(blur0)
             # 3D plot
-            # x_tp = map_def(d_est, 80, 160, 0, 10)
-            # y_tp = map_def(indextip0[0], 0, re_size[0], 0, 10)
-            # z_tp = map_def(indextip0[1], 0, re_size[1], 0, 10)
-            # # print(x_tp, y_tp, z_tp)
-            # hl.set_data(x_tp, y_tp)
-            # hl.set_3d_properties(z_tp)
 
+            # z_tp = map_def(indextip0[1], 0, re_size[1], 0, 10)
+            # print(x_tp, y_tp, z_tp)
+            hl.set_data(xcur, ycur)
+            # hl.set_3d_properties(z_tp)
+            print('Lift FLAG:{0}, x:{1:.3f}, y:{2:.3f}, xprev:{3:.3f}, dr:{4:.3f}'.format(lift_flag, xcur, ycur, xcur_prev, dr))
             plt.pause(0.001)
     # except KeyboardInterrupt:
     #     cv.imwrite('./fingertip.jpg', img0)
