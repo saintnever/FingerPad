@@ -19,6 +19,9 @@ from scipy import ndimage, spatial
 from mahotas.morph import hitmiss
 from mpl_toolkits.mplot3d import Axes3D
 import pickle
+from filterpy.kalman import KalmanFilter
+from filterpy.common import Q_discrete_white_noise
+
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
         threading.Thread.__init__(self)
@@ -449,23 +452,12 @@ def distance(point1, point2=None):
     else:
         return math.sqrt(point1[0] ** 2 + point1[1] ** 2)
 
-q0 = queue.Queue()
-q1 = queue.Queue()
-stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM17')
-data_reader0.start()
-# data_reader1 = SerialReader(stop_event, q1, 'COM18')
-# data_reader1.start()
 re_size = (24*10, 32*10)
 path = './cal_data/'
 
 if __name__ == '__main__':
     try:
         fig, ([ax0, ax1], [ax2, ax3], [ax4, ax5]) = plt.subplots(3, 2)
-        # im1 = ax1.imshow(np.random.uniform(low=22, high=32, size=(20, 36)), vmin=20, vmax=36, cmap='jet')
-        #                  # interpolation='lanczos')
-        # im0 = ax0.imshow(np.random.uniform(low=22, high=32, size=(20, 36)), vmin=20, vmax=36, cmap='jet')
-        #                  # interpolation='lanczos')
         im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=re_size), cmap='seismic')
         im1 = ax1.imshow(np.random.uniform(low=22, high=32, size=re_size), cmap='seismic')
         im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
@@ -475,23 +467,26 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.ion()
 
-        # map = plt.figure()
-        # map_ax = map.add_subplot(111)
-        # #  Setting the axes properties
-        # # map_ax.set_xlim3d([0.0, 10.0])
-        # map_ax.set_xlim([0.0, 10.0])
-        # map_ax.set_xlabel('x')
-        # # map_ax.set_ylim3d([0.0, 10.0])
-        # map_ax.set_ylim([0.0, 10.0])
-        # map_ax.set_ylabel('y')
-        # # map_ax.set_zlim3d([10.0, 0.0])
-        # # map_ax.set_zlabel('z')
-        # hl, = map_ax.plot([0], [0], 'o',markersize=10)
+        map = plt.figure()
+        map_ax = map.add_subplot(111)
+        #  Setting the axes properties
+        # map_ax.set_xlim3d([0.0, 10.0])
+        map_ax.set_xlim([0.0, 10.0])
+        map_ax.set_xlabel('x')
+        # map_ax.set_ylim3d([0.0, 10.0])
+        map_ax.set_ylim([0.0, 10.0])
+        map_ax.set_ylabel('y')
+        # map_ax.set_zlim3d([10.0, 0.0])
+        # map_ax.set_zlabel('z')
+        hl, = map_ax.plot([0], [0], 'o',markersize=10)
 
-        # fgbg = cv.createBackgroundSubtractorMOG2(history=5, detectShadows=False)
+        with open(path + 'cal_matrix.pkl', 'rb') as file:
+            [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
+        with open(path + 'rect_movement_hot.pkl', 'rb') as file:
+            ctemps_xv = pickle.load(file)
         mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
         cnt = 0
-        mlen = 3
+        mlen = 1
         q_ft = deque(maxlen=mlen)
         q_ar = deque(maxlen=mlen)
         q_temp = deque(maxlen=mlen)
@@ -504,8 +499,6 @@ if __name__ == '__main__':
         bp_prev = [[0], [0]]
         cnt0_prev = [0]
         cnt1_prev = [0]
-        # timg = cv.imread('fingertip.jpg')
-        # print(np.shape(timg))
         cal_cnt = 30
         temp0_bg = [0] * 768
         temp1_bg = [0] * 768
@@ -516,25 +509,40 @@ if __name__ == '__main__':
         lift_flag = 0
         xcur = 5
         ycur = 5
+        xcur_list = []
+        ycur_list = []
         xcur_prev = 5
-        ycur_prev =1
-        hp = 5
+        ycur_prev = 8
+        hp = 1
         yp = 5
-        with open(path + 'cal_matrix.pkl', 'rb') as file:
-            [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
-        ctemps = []
-        while True:
-            # print(time.time())
-            time0, temp_raw = q0.get()
-            ctemps.append([time0, temp_raw])
-            # continue
+        xtps = list()
+        ytps = list()
+
+        f = KalmanFilter(dim_x=4, dim_z=2)
+        f.x = np.array([[5], [5], [0], [0]])
+
+        f.H = np.array([[1, 0, 0, 0],
+                        [0, 1, 0, 0]])
+        # f.G = np.array([[0, 0, 1, 0],
+        #                 [0, 0, 0, 1]]).transpose()
+        f.P *= 100
+        f.R *= 5
+        f.Q = Q_discrete_white_noise(dim=4, dt=0.1, var=0.13)
+
+        for item in ctemps_xv:
+            time0 = item[0]
+            temp0 = item[1]
             dtime = time0-timestamp_prev
+            f.F = np.array([[1, 0, dtime, 0],
+                            [0, 1, 0, dtime],
+                            [0, 0, 1, 0],
+                            [0, 0, 0, 1]])
             timestamp_prev = time0
-            q_temp.append(temp_raw)
-            if len(list(q_temp)) == mlen:
-                temp0 = np.average(np.array(q_temp), weights=range(1, mlen+1), axis=0)
-            else:
-                temp0 = temp_raw
+            # q_temp.append(temp_raw)
+            # if len(list(q_temp)) == mlen:
+            #     temp0 = np.average(np.array(q_temp), weights=range(1, mlen+1), axis=0)
+            # else:
+            #     temp0 = temp_raw
             temp0 = colorscale(temp0, np.min(temp0), np.max(temp0))
             img0 = np.array([[0] * 32 for _ in range(24)], np.uint8)
             for i, x in enumerate(temp0):
@@ -546,22 +554,16 @@ if __name__ == '__main__':
             img0 = cv.flip(img0, 0)
 
             # blur, opening, and erode
-            # kernelo = cv.getStructuringElement(cv.MORPH_ELLIPSE, (15, 15))
-            # img0 = cv.morphologyEx(img0, cv.MORPH_OPEN, kernelo)
-            # kerneld = cv.getStructuringElement(cv.MORPH_ELLIPSE, (11,11))
-            # img0 = cv.erode(img0, kerneld)
             blur0 = cv.GaussianBlur(img0, (31, 31), 0)
             ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
 
             # h, w = blur0.shape[:2]
             # newcameramtx, roi = cv.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
-
             # for img in cimg
             # dst = cv.undistort(th0, mtx, dist, None, newCameraMatrix=newcameramtx)
             # im3.set_array(dst)
 
             contours, hierarchy = cv.findContours(th0, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
-
             areas = [cv.contourArea(c) for c in contours]
             dists = list()
 
@@ -573,8 +575,7 @@ if __name__ == '__main__':
             x, y, w, h = cv.boundingRect(cnt)
             center = [int(x + w / 2), int(y + h / 2)]
             mask = np.zeros_like(blur0)
-            # cv.fillPoly(mask_ft, [cnt], 1)
-            # defects = cv.convexityDefects(cnt, hull)
+
             xmax = 0
             ymin = 10000
             xmin = 10000
@@ -584,7 +585,6 @@ if __name__ == '__main__':
             iwb = 0
             temp0 = np.zeros_like(blur0)
             for i in range(len(hull)):
-                # cv.circle(temp0, tuple(cnt[hull[i]][0][0]), 10, (127, 255, 255), -1)
                 if cnt[hull[i]][0][0][0] > xmax:
                     xmax = cnt[hull[i]][0][0][0]
                     p0 = tuple(cnt[hull[i]][0][0])
@@ -602,9 +602,9 @@ if __name__ == '__main__':
                     cv.line(temp0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[i + 1]][0][0]), [127, 255, 255], 3)
                 else:
                     cv.line(temp0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[0]][0][0]), [127, 255, 255], 3)
-            pb = (0,0)
+            pb = (0, 0)
             pwb = tuple(cnt[hull[iwb]][0][0])
-            phb = (0,0)
+            phb = (0, 0)
             for i in range(len(hull)):
                 phb = tuple(cnt[hull[iwb - i]][0][0])
                 if distance(pwb, phb) > 40:
@@ -637,23 +637,15 @@ if __name__ == '__main__':
                         indextip0 = tuple(cp[0])
 
             th0 = th0.astype(np.bool)
-            # th0_s = morphology.skeletonize(th0)
-            # im4.set_array(th0_s)
 
             wr = np.sum(th0.transpose()[0]) / len(th0)
             ar_full = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
 
             th0[indextip0[1]:] = 0
-            # for i, item in enumerate(th0):
-            #     th0[i][:center[1]] = 0
-            # th0 = np.multiply(th0, mask)
+
             im2.set_array(th0)
             ar = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
 
-            # q_ar.append(ar)
-            # if len(list(q_ar)) == mlen:
-            #     ar = np.average(list(q_ar), weights=range(1, mlen+1), axis=0)
-            # dtime = 1
             v_x = (indextip0[0] - indextip0_prev[0]) / dtime
             v_lift = (indextip0[1] - indextip0_prev[1]) / dtime
             v_far = (ar_full - fullar_prev) / dtime
@@ -666,6 +658,9 @@ if __name__ == '__main__':
             fw = 0
             if len(dists) != 0:
                 fw = np.nanmin(dists)
+
+
+
             # print(slope_fp)
             # print('finger width:{0:.3f}, maxDefect:{1:.3f}, area ratio:{2:.3f}, full ar:{3:.3f}, wrist ratio:{4:.3f}'.format(fw, distmax,
             #                                                                                                 ar, ar_full, wr))
@@ -676,9 +671,7 @@ if __name__ == '__main__':
                     lift_flag = 1
                     xcur_prev = xcur
                     ycur_prev = ycur
-                    with open(path + 'cross_movement_hot.pkl', 'wb') as file:
-                        pickle.dump(ctemps, file)
-                    break
+
             # elif slope_wp-slope_fp < 0.8:
             elif slope_fp > -0.8:
                 dmax = 0
@@ -698,17 +691,21 @@ if __name__ == '__main__':
                         hp = dmax
                         lift_flag = 0
                         yp = indextip0[0]
-
                     else:
+                        if hp == 1:
+                            hp = dmax
+                            yp = indextip0[0]
                         dr = (hp - dmax) / dmax
-                        xcur = dr*20 + xcur_prev
-                        ycur = 20*(indextip0[0] - yp)/re_size[0] + ycur_prev
-                        # x_tp = xcur
-                        # y_tp = ycur
-                        xcur = confine(xcur, 0, 10)
-                        ycur = confine(ycur, 0, 10)
-            im1.set_array(temp0)
+                        xcur = dr * 10 + xcur_prev
+                        ycur = 10 * (indextip0[0] - yp) / re_size[0] + ycur_prev
+                        f.predict()
+                        # f.update([[xcur], [ycur], [(xcur - xcur_prev) / dtime], [(ycur - ycur_prev) / dtime]])
+                        f.update([[xcur], [ycur]])
 
+                        xcur = confine(f.x[0][0], 0, 10)
+                        ycur = confine(f.x[1][0], 0, 10)
+
+            im1.set_array(temp0)
             fullar_prev = ar_full
             par_prev = ar
             indextip0_prev = indextip0
@@ -723,17 +720,12 @@ if __name__ == '__main__':
 
             # z_tp = map_def(indextip0[1], 0, re_size[1], 0, 10)
             # print(x_tp, y_tp, z_tp)
-            # hl.set_data(xcur, ycur)
+            hl.set_data(xcur, ycur)
             # hl.set_3d_properties(z_tp)
             print('Lift FLAG:{0}, x:{1:.3f}, y:{2:.3f}, xprev:{3:.3f}, dr:{4:.3f}'.format(lift_flag, xcur, ycur, xcur_prev, dr))
             plt.pause(0.001)
     # except KeyboardInterrupt:
     #     with open(path + 'x_movement.pkl', 'wb') as file:
     #         pickle.dump(cimg, file)
-    # except ValueError:
-    #     print(th0)
     finally:
         cv.destroyAllWindows()
-        stop_event.set()
-        data_reader0.clean()
-        data_reader0.clean()
