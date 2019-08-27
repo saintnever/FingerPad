@@ -482,8 +482,9 @@ if __name__ == '__main__':
 
         with open(path + 'cal_matrix.pkl', 'rb') as file:
             [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
-        with open(path + 'rect_movement_hot.pkl', 'rb') as file:
+        with open(path + 'y_movement_hot.pkl', 'rb') as file:
             ctemps_xv = pickle.load(file)
+
         mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
         cnt = 0
         mlen = 1
@@ -511,7 +512,7 @@ if __name__ == '__main__':
         ycur = 5
         xcur_list = []
         ycur_list = []
-        xcur_prev = 5
+        xcur_prev = 1
         ycur_prev = 8
         hp = 1
         yp = 5
@@ -519,25 +520,26 @@ if __name__ == '__main__':
         ytps = list()
 
         f = KalmanFilter(dim_x=4, dim_z=2)
-        f.x = np.array([[5], [5], [0], [0]])
+        f.x = np.array([[1], [8], [0], [0]])
 
         f.H = np.array([[1, 0, 0, 0],
                         [0, 1, 0, 0]])
         # f.G = np.array([[0, 0, 1, 0],
         #                 [0, 0, 0, 1]]).transpose()
-        f.P *= 100
-        f.R *= 5
-        f.Q = Q_discrete_white_noise(dim=4, dt=0.1, var=0.13)
-
+        f.P *= 1000
+        f.R *= 10
+        f.Q = Q_discrete_white_noise(dim=4, dt=0.125, var=1.5)
+        f.F = np.array([[1, 0, 0.125, 0],
+                        [0, 1, 0, 0.125],
+                        [0, 0, 1, 0],
+                        [0, 0, 0, 1]])
         for item in ctemps_xv:
             time0 = item[0]
             temp0 = item[1]
             dtime = time0-timestamp_prev
-            f.F = np.array([[1, 0, dtime, 0],
-                            [0, 1, 0, dtime],
-                            [0, 0, 1, 0],
-                            [0, 0, 0, 1]])
+
             timestamp_prev = time0
+            time.sleep(0.05)
             # q_temp.append(temp_raw)
             # if len(list(q_temp)) == mlen:
             #     temp0 = np.average(np.array(q_temp), weights=range(1, mlen+1), axis=0)
@@ -603,6 +605,7 @@ if __name__ == '__main__':
                 else:
                     cv.line(temp0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[0]][0][0]), [127, 255, 255], 3)
             pb = (0, 0)
+            pa = (0, 0)
             pwb = tuple(cnt[hull[iwb]][0][0])
             phb = (0, 0)
             for i in range(len(hull)):
@@ -615,6 +618,33 @@ if __name__ == '__main__':
                 pb = tuple(cnt[hull[ifp+i]][0][0])
                 if distance(p0, pb) > 40:
                     break
+            # measure finger width
+            # draw a line parallel with the finger
+            for i in range(len(hull)):
+                pa = tuple(cnt[hull[ifp - i]][0][0])
+                if distance(p0, pa) > 40:
+                    break
+            cv.line(blur0, p0, pa, [127, 255, 255], 2)
+            # draw a line perpendicular to the finger
+            c0, c1, d0, d1 = getPerpCoord(p0[0], p0[1], pa[0], pa[1], 50)
+            tmp = np.zeros_like(blur0, np.uint8)
+            cv.line(tmp, (c0, c1), (d0, d1), [255, 255, 255], 5)
+            ref = np.zeros_like(blur0, np.uint8)
+            ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
+            # find intercept points of the line and the contour
+            (x_intercept, y_intercept) = np.nonzero(np.logical_and(tmp, ref))
+            # calculate distances between the points and the line
+            p1 = np.array(p0)
+            p2 = np.array(pa)
+            dists = list()
+            for m in range(len(x_intercept)):
+                p3 = np.array([y_intercept[m], x_intercept[m]])
+                cv.circle(blur0, tuple(p3), 2, (0, 255, 255), -1)
+                dist = abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
+                if dist > 8 and dist < 40:
+                    dists.append(dist)
+            finger_width = np.nanmean(dists)
+
             slope_fp = (p0[1] - pb[1]) / (p0[0] - pb[0])
             # print(slope_wp, slope_fp, slope_wp-slope_fp)
             cv.circle(temp0, p0, 10, (127, 255, 255), -1)
@@ -683,7 +713,8 @@ if __name__ == '__main__':
                         dmax = dist
                         ph = tuple(ptmp)
                 cv.circle(temp0, ph, 12, (127, 255, 255), -1)
-                dmax = h
+                # dmax = h
+                dmax = finger_width
                 # if 10 < ph[0] and indextip0[0] < re_size[0] - 3:
                 if True:
                     if lift_flag == 1:

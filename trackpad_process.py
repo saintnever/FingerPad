@@ -483,10 +483,10 @@ if __name__ == '__main__':
         #     cimg = pickle.load(file)
         ftips = list()
         dist_list = [[0 for _ in range(xrg)] for _ in range(yrg)]
-        for j in range(xrg):
-            for i in range(yrg):
-        # for i in [6]:
-        #     for j in [4]:
+        # for j in range(xrg):
+        #     for i in range(yrg):
+        for i in [6]:
+            for j in [4]:
                 # img = np.mean(cimg[i][j], axis=0)
                 # img = cimg[i][j][int(len(cimg[i][j]) / 2)]
                 temp = np.amin(temps[i][j], axis=0)
@@ -501,10 +501,12 @@ if __name__ == '__main__':
                     img_raw[int(row)][int(col)] = x
                     img_scale[int(row)][int(col)] = temp_scale[k]
 
+                img_raw[img_raw < 140] = 0
                 img_raw = cv.flip(img_raw, 0)
                 img_raw = cv.resize(img_raw, (len(img_raw[0])*10, len(img_raw)*10), interpolation=cv.INTER_CUBIC)
                 blur_raw = cv.GaussianBlur(img_raw, (25, 25), 0)
 
+                img_scale[img_scale < 140] = 0
                 img = cv.flip(img_scale, 0)
                 img = cv.resize(img, (len(img[0]) * 10, len(img) * 10), interpolation=cv.INTER_CUBIC)
                 blur = cv.GaussianBlur(img, (25, 25), 0)
@@ -528,9 +530,9 @@ if __name__ == '__main__':
                     x, y, w, h = cv.boundingRect(cnt)
                     cv.rectangle(blur, (x, h), (w, y), (0, 255, 0), 3)
 
-                    hull = cv.convexHull(cnt, returnPoints=True)
-                    print(hull)
-                    break
+                    hull = cv.convexHull(cnt, returnPoints=False)
+                    # print(hull)
+                    # break
                     defects = cv.convexityDefects(cnt, hull)
                     starts = list()
                     ends = list()
@@ -676,12 +678,12 @@ if __name__ == '__main__':
                 # cv.line(blur, lines[id_width][0], lines[id_width][1], 0, 1)
                 # blur = cv.circle(blur, (indextip0[1], indextip0[0]), 5, (0, 127, 255), -1)
 
-                # plt.figure()
-                # fig, ([ax0, ax1]) = plt.subplots(1,2)
-                # ax0.imshow(blur, cmap='seismic')
-                # ax1.imshow(th0, cmap='seismic')
-                # plt.title(str(i) + '_' + str(j))
-                # plt.show()
+                plt.figure()
+                fig, ([ax0, ax1]) = plt.subplots(1,2)
+                ax0.imshow(blur, cmap='seismic')
+                ax1.imshow(th0, cmap='seismic')
+                plt.title(str(i) + '_' + str(j))
+                plt.show()
 
                 # # Step #6e
                 # cv.line(blur, (indextip0[1], indextip0[0]), (x_intercept[-1], y_intercept[-1]), 0, 1)
