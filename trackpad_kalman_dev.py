@@ -453,6 +453,7 @@ def distance(point1, point2=None):
         return math.sqrt(point1[0] ** 2 + point1[1] ** 2)
 
 re_size = (24*10, 32*10)
+# re_size = (32*5, 24*5)
 path = './cal_data/'
 
 if __name__ == '__main__':
@@ -461,7 +462,7 @@ if __name__ == '__main__':
         im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=re_size), cmap='seismic')
         im1 = ax1.imshow(np.random.uniform(low=22, high=32, size=re_size), cmap='seismic')
         im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
-        im3 = ax3.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
+        im3 = ax3.imshow(np.random.uniform(low=0, high=255, size=re_size), cmap='seismic')
         im4 = ax4.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
         im5 = ax5.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
         plt.tight_layout()
@@ -478,11 +479,11 @@ if __name__ == '__main__':
         map_ax.set_ylabel('y')
         # map_ax.set_zlim3d([10.0, 0.0])
         # map_ax.set_zlabel('z')
-        hl, = map_ax.plot([0], [0], 'o',markersize=10)
+        hl, = map_ax.plot([0], [0], 'o', markersize=10)
 
-        with open(path + 'cal_matrix.pkl', 'rb') as file:
+        with open(path + 'cal_matrix_radial.pkl', 'rb') as file:
             [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
-        with open(path + 'y_movement_hot.pkl', 'rb') as file:
+        with open(path + 'rect3_movement_hot.pkl', 'rb') as file:
             ctemps_xv = pickle.load(file)
 
         mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
@@ -515,6 +516,8 @@ if __name__ == '__main__':
         xcur_prev = 1
         ycur_prev = 8
         hp = 1
+        x_origin = 1
+        ph_origin = (0,0)
         yp = 5
         xtps = list()
         ytps = list()
@@ -533,7 +536,7 @@ if __name__ == '__main__':
                         [0, 1, 0, 0.125],
                         [0, 0, 1, 0],
                         [0, 0, 0, 1]])
-        for item in ctemps_xv:
+        for enum, item in enumerate(ctemps_xv):
             time0 = item[0]
             temp0 = item[1]
             dtime = time0-timestamp_prev
@@ -551,6 +554,7 @@ if __name__ == '__main__':
                 row = i // 32
                 col = 31 - i % 32
                 img0[int(row)][int(col)] = x
+            # img0 = img0.transpose()
             img0[img0 < 140] = 0
             img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
             img0 = cv.flip(img0, 0)
@@ -558,11 +562,12 @@ if __name__ == '__main__':
             # blur, opening, and erode
             blur0 = cv.GaussianBlur(img0, (31, 31), 0)
             ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-
-            # h, w = blur0.shape[:2]
-            # newcameramtx, roi = cv.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
-            # for img in cimg
-            # dst = cv.undistort(th0, mtx, dist, None, newCameraMatrix=newcameramtx)
+            #
+            # hc, wc = blur0.shape[:2]
+            # newcameramtx, roi = cv.getOptimalNewCameraMatrix(mtx, dist, (wc, hc), 1, (wc, hc))
+            # # for img in cimg
+            # dst = cv.undistort(blur0, mtx, dist, None, newCameraMatrix=newcameramtx)
+            # # dst = cv.undistort(blur0, mtx, dist, None, None)
             # im3.set_array(dst)
 
             contours, hierarchy = cv.findContours(th0, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
@@ -713,28 +718,35 @@ if __name__ == '__main__':
                         dmax = dist
                         ph = tuple(ptmp)
                 cv.circle(temp0, ph, 12, (127, 255, 255), -1)
-                # dmax = h
-                dmax = finger_width
+                dmax = h - 0.28 * (ph[0] - ph_origin[0])
+                x_re = (60*216.7) / dmax
+                # dmax = finger_width
                 # if 10 < ph[0] and indextip0[0] < re_size[0] - 3:
                 if True:
-                    if lift_flag == 1:
+                    if enum == 0:
                         print('PUT DOWN!')
                         hp = dmax
+                        x_origin = x_re
                         lift_flag = 0
                         yp = indextip0[0]
+                        indextip0_correct = 0
+                        ph_origin = ph
                     else:
                         if hp == 1:
                             hp = dmax
                             yp = indextip0[0]
                         dr = (hp - dmax) / dmax
                         xcur = dr * 10 + xcur_prev
-                        ycur = 10 * (indextip0[0] - yp) / re_size[0] + ycur_prev
-                        f.predict()
-                        # f.update([[xcur], [ycur], [(xcur - xcur_prev) / dtime], [(ycur - ycur_prev) / dtime]])
-                        f.update([[xcur], [ycur]])
+                        indextip0_correct = -(indextip0[0] - re_size[1] / 2) * (x_re - x_origin) / (x_origin + 30)
+                        ycur = 10 * (indextip0[0] + indextip0_correct - yp) / re_size[0] + ycur_prev
 
-                        xcur = confine(f.x[0][0], 0, 10)
-                        ycur = confine(f.x[1][0], 0, 10)
+                        # f.predict()
+                        # f.update([[xcur], [ycur]])
+                        xcur = confine(xcur, 0, 10)
+                        ycur = confine(ycur, 0, 10)
+                        #
+                        # xcur = confine(f.x[0][0], 0, 10)
+                        # ycur = confine(f.x[1][0], 0, 10)
 
             im1.set_array(temp0)
             fullar_prev = ar_full
@@ -753,7 +765,7 @@ if __name__ == '__main__':
             # print(x_tp, y_tp, z_tp)
             hl.set_data(xcur, ycur)
             # hl.set_3d_properties(z_tp)
-            print('Lift FLAG:{0}, x:{1:.3f}, y:{2:.3f}, xprev:{3:.3f}, dr:{4:.3f}'.format(lift_flag, xcur, ycur, xcur_prev, dr))
+            print('Lift FLAG:{0}, x:{1:.3f}, y:{2:.3f}, xprev:{3:.3f}, dr:{4:.3f}, ycorrrect:{5:.3f}'.format(lift_flag, xcur, ycur, xcur_prev, dr, indextip0_correct))
             plt.pause(0.001)
     # except KeyboardInterrupt:
     #     with open(path + 'x_movement.pkl', 'wb') as file:

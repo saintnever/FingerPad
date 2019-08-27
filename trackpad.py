@@ -19,6 +19,9 @@ from scipy import ndimage, spatial
 from mahotas.morph import hitmiss
 from mpl_toolkits.mplot3d import Axes3D
 import pickle
+from filterpy.kalman import KalmanFilter
+from filterpy.common import Q_discrete_white_noise
+
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
         threading.Thread.__init__(self)
@@ -452,11 +455,12 @@ def distance(point1, point2=None):
 q0 = queue.Queue()
 q1 = queue.Queue()
 stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM17')
+data_reader0 = SerialReader(stop_event, q0, 'COM16')
 data_reader0.start()
 # data_reader1 = SerialReader(stop_event, q1, 'COM18')
 # data_reader1.start()
 re_size = (24*10, 32*10)
+plot_size = (32*10, 24*10)
 path = './cal_data/'
 
 if __name__ == '__main__':
@@ -466,27 +470,27 @@ if __name__ == '__main__':
         #                  # interpolation='lanczos')
         # im0 = ax0.imshow(np.random.uniform(low=22, high=32, size=(20, 36)), vmin=20, vmax=36, cmap='jet')
         #                  # interpolation='lanczos')
-        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=re_size), cmap='seismic')
-        im1 = ax1.imshow(np.random.uniform(low=22, high=32, size=re_size), cmap='seismic')
-        im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
-        im3 = ax3.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
-        im4 = ax4.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
-        im5 = ax5.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
+        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
+        im1 = ax1.imshow(np.random.uniform(low=22, high=32, size=plot_size), cmap='seismic')
+        im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
+        im3 = ax3.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
+        im4 = ax4.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
+        im5 = ax5.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
         plt.tight_layout()
         plt.ion()
 
-        # map = plt.figure()
-        # map_ax = map.add_subplot(111)
-        # #  Setting the axes properties
-        # # map_ax.set_xlim3d([0.0, 10.0])
-        # map_ax.set_xlim([0.0, 10.0])
-        # map_ax.set_xlabel('x')
-        # # map_ax.set_ylim3d([0.0, 10.0])
-        # map_ax.set_ylim([0.0, 10.0])
-        # map_ax.set_ylabel('y')
-        # # map_ax.set_zlim3d([10.0, 0.0])
-        # # map_ax.set_zlabel('z')
-        # hl, = map_ax.plot([0], [0], 'o',markersize=10)
+        map = plt.figure()
+        map_ax = map.add_subplot(111)
+        #  Setting the axes properties
+        # map_ax.set_xlim3d([0.0, 10.0])
+        map_ax.set_xlim([0.0, 10.0])
+        map_ax.set_xlabel('x')
+        # map_ax.set_ylim3d([0.0, 10.0])
+        map_ax.set_ylim([0.0, 10.0])
+        map_ax.set_ylabel('y')
+        # map_ax.set_zlim3d([10.0, 0.0])
+        # map_ax.set_zlabel('z')
+        hl, = map_ax.plot([0], [0], 'o',markersize=10)
 
         # fgbg = cv.createBackgroundSubtractorMOG2(history=5, detectShadows=False)
         mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
@@ -520,9 +524,27 @@ if __name__ == '__main__':
         ycur_prev =1
         hp = 5
         yp = 5
+        x_origin = 1
+        ph_origin = (0,0)
+        x_re = 1
         with open(path + 'cal_matrix.pkl', 'rb') as file:
             [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
         ctemps = []
+
+        f = KalmanFilter(dim_x=4, dim_z=2)
+        f.x = np.array([[5], [5], [0], [0]])
+
+        f.H = np.array([[1, 0, 0, 0],
+                        [0, 1, 0, 0]])
+        # f.G = np.array([[0, 0, 1, 0],
+        #                 [0, 0, 0, 1]]).transpose()
+        f.P *= 200
+        f.R *= 10
+        f.Q = Q_discrete_white_noise(dim=4, dt=0.125, var=1.5)
+        f.F = np.array([[1, 0, 0.125, 0],
+                        [0, 1, 0, 0.125],
+                        [0, 0, 1, 0],
+                        [0, 0, 0, 1]])
         while True:
             # print(time.time())
             time0, temp_raw = q0.get()
@@ -541,8 +563,9 @@ if __name__ == '__main__':
                 row = i // 32
                 col = 31 - i % 32
                 img0[int(row)][int(col)] = x
-            img0[img0 < 140] = 0
+            img0[img0 < 160] = 0
             img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
+
             img0 = cv.flip(img0, 0)
 
             # blur, opening, and erode
@@ -615,6 +638,34 @@ if __name__ == '__main__':
                 pb = tuple(cnt[hull[ifp+i]][0][0])
                 if distance(p0, pb) > 40:
                     break
+            pa = (0, 0)
+            # measure finger width
+            # draw a line parallel with the finger
+            for i in range(len(hull)):
+                pa = tuple(cnt[hull[ifp - i]][0][0])
+                if distance(p0, pa) > 40:
+                    break
+            cv.line(blur0, p0, pa, [127, 255, 255], 2)
+            # draw a line perpendicular to the finger
+            c0, c1, d0, d1 = getPerpCoord(p0[0], p0[1], pa[0], pa[1], 50)
+            tmp = np.zeros_like(blur0, np.uint8)
+            cv.line(tmp, (c0, c1), (d0, d1), [255, 255, 255], 5)
+            ref = np.zeros_like(blur0, np.uint8)
+            ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
+            # find intercept points of the line and the contour
+            (x_intercept, y_intercept) = np.nonzero(np.logical_and(tmp, ref))
+            # calculate distances between the points and the line
+            p1 = np.array(p0)
+            p2 = np.array(pa)
+            dists = list()
+            for m in range(len(x_intercept)):
+                p3 = np.array([y_intercept[m], x_intercept[m]])
+                cv.circle(blur0, tuple(p3), 2, (0, 255, 255), -1)
+                dist = abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
+                if dist > 8 and dist < 40:
+                    dists.append(dist)
+            finger_width = np.nanmean(dists)
+
             slope_fp = (p0[1] - pb[1]) / (p0[0] - pb[0])
             # print(slope_wp, slope_fp, slope_wp-slope_fp)
             cv.circle(temp0, p0, 10, (127, 255, 255), -1)
@@ -670,15 +721,16 @@ if __name__ == '__main__':
             # print('finger width:{0:.3f}, maxDefect:{1:.3f}, area ratio:{2:.3f}, full ar:{3:.3f}, wrist ratio:{4:.3f}'.format(fw, distmax,
             #                                                                                                 ar, ar_full, wr))
             # if slope_wp - slope_fp > 1.2:
+            indextip0_correct = 0
             if slope_fp < -1.5:
                 if lift_flag == 0:
                     print('LIFT')
                     lift_flag = 1
                     xcur_prev = xcur
                     ycur_prev = ycur
-                    with open(path + 'cross_movement_hot.pkl', 'wb') as file:
-                        pickle.dump(ctemps, file)
-                    break
+                    # with open(path + 'cross_movement_hot.pkl', 'wb') as file:
+                    #     pickle.dump(ctemps, file)
+                    # break
             # elif slope_wp-slope_fp < 0.8:
             elif slope_fp > -0.8:
                 dmax = 0
@@ -690,7 +742,10 @@ if __name__ == '__main__':
                         dmax = dist
                         ph = tuple(ptmp)
                 cv.circle(temp0, ph, 12, (127, 255, 255), -1)
-                dmax = h
+                h_correction = h*abs(ph[0] - re_size[0]/2)/(re_size[0])*0.4
+                dmax = h + h_correction
+                x_re = (60*216.7) / dmax
+                # dmax = finger_width
                 # if 10 < ph[0] and indextip0[0] < re_size[0] - 3:
                 if True:
                     if lift_flag == 1:
@@ -698,15 +753,24 @@ if __name__ == '__main__':
                         hp = dmax
                         lift_flag = 0
                         yp = indextip0[0]
-
+                        x_origin = x_re
+                        indextip0_correct = 0
+                        ph_origin = ph
                     else:
                         dr = (hp - dmax) / dmax
                         xcur = dr*20 + xcur_prev
-                        ycur = 20*(indextip0[0] - yp)/re_size[0] + ycur_prev
+                        indextip0_correct = 3*(indextip0[0] - re_size[0] / 2) * (x_re - x_origin) / (x_origin)
+
+                        ycur = 20*(indextip0[0] + indextip0_correct - yp)/re_size[0] + ycur_prev
+                        f.predict()
+                        f.update([[xcur], [ycur]])
+
+                        xcur = confine(f.x[0][0], 0, 10)
+                        ycur = confine(f.x[1][0], 0, 10)
                         # x_tp = xcur
                         # y_tp = ycur
-                        xcur = confine(xcur, 0, 10)
-                        ycur = confine(ycur, 0, 10)
+                        # xcur = confine(xcur, 0, 10)
+                        # ycur = confine(ycur, 0, 10)
             im1.set_array(temp0)
 
             fullar_prev = ar_full
@@ -723,9 +787,10 @@ if __name__ == '__main__':
 
             # z_tp = map_def(indextip0[1], 0, re_size[1], 0, 10)
             # print(x_tp, y_tp, z_tp)
-            # hl.set_data(xcur, ycur)
+            hl.set_data(xcur, ycur)
             # hl.set_3d_properties(z_tp)
-            print('Lift FLAG:{0}, x:{1:.3f}, y:{2:.3f}, xprev:{3:.3f}, dr:{4:.3f}'.format(lift_flag, xcur, ycur, xcur_prev, dr))
+            print('Lift FLAG:{0}, x:{1:.3f},  h:{2:.3f}, y:{3:.3f}, y_correct:{4:.3f},, ycorrrect:{5:.3f}, hcorrect:{6:.3f}'
+                  .format(lift_flag, dmax,  h, ycur, indextip0[0]+indextip0_correct, indextip0_correct, h_correction))
             plt.pause(0.001)
     # except KeyboardInterrupt:
     #     with open(path + 'x_movement.pkl', 'wb') as file:

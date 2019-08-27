@@ -407,11 +407,11 @@ def find_indextip(bp0_ind, ep0_ind, indextip_prev, bp_prev):
 
 q0 = queue.Queue()
 stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM16')
+data_reader0 = SerialReader(stop_event, q0, 'COM17')
 data_reader0.start()
 # data_reader1 = SerialReader(stop_event, q1, 'COM18')
 # data_reader1.start()
-re_size = (24*5, 32*5)
+re_size = (24*10, 32*10)
 path = './trackpad_model_data/'
 
 if __name__ == '__main__':
@@ -420,8 +420,8 @@ if __name__ == '__main__':
         im0 = ax0.imshow(np.random.uniform(low=20, high=35, size=re_size), cmap='seismic')
         plt.tight_layout()
         plt.ion()
-        xrg = 11
-        yrg = 11
+        xrg = 7
+        yrg = 6
         xcur = 0
         ycur = 0
         tcnt = 0
@@ -430,7 +430,7 @@ if __name__ == '__main__':
         cimg = [[[] for _ in range(yrg)] for _ in range(xrg)]
         # time.sleep(5)
         while True:
-            if ycur >= yrg:
+            if xcur > xrg:
                 break
             time0, temp0 = q0.get()
             img0 = np.array([[0] * 32 for _ in range(24)], np.uint8)
@@ -441,7 +441,7 @@ if __name__ == '__main__':
 
             time_loop = round(time.monotonic() - time_start, 2)
             tcnt = int(time_loop) // t
-            xcur = tcnt // xrg
+            xcur = tcnt // yrg
             ycur = tcnt % yrg
             filename = str(xcur) + '_' + str(ycur) + '_' + str(time_loop)
             if int(time_loop) % t < 3:
@@ -456,7 +456,8 @@ if __name__ == '__main__':
             im0.set_array(blur)
             plt.pause(0.001)
         plt.close()
-        with open(path + 'temps_model_hot.pkl', 'wb') as file:
+        with open(path + 'temps_model_flat'
+                         '.pkl', 'wb') as file:
             pickle.dump(cimg, file)
 
     finally:

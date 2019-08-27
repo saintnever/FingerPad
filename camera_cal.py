@@ -10,9 +10,10 @@ import pickle
 path = './cal_data/'
 
 cimg = list()
-filenames = [filename for filename in os.listdir(path) if filename.endswith('0.jpg')]
+filenames = [filename for filename in os.listdir(path) if filename.endswith('.jpg')]
 for file in filenames:
     img_raw = cv.imread(path+file)
+    # img_raw = img_raw.transpose()
     img_raw = cv.cvtColor(img_raw, cv.COLOR_BGR2GRAY)
     ret, th = cv.threshold(img_raw, 30, 255, cv.THRESH_BINARY)
     cimg.append(th)
@@ -39,13 +40,18 @@ for i,img in enumerate(cimg):
         img_points.append([cX, cY])
     cal_points.append(img_points)
 
-ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(np.array(objpoints, np.float32)[:len(cal_points)], np.array(cal_points,np.float32), cimg[0].shape, None, None)
-with open(path+'cal_matrix.pkl', 'wb') as file:
+ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(np.array(objpoints, np.float32)[:len(cal_points)], np.array(cal_points,np.float32), cimg[0].shape, None, 4,None,None,cv.CALIB_FIX_K3+cv.CALIB_ZERO_TANGENT_DIST,
+                                                   criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 2e-16))
+
+# ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(np.array(objpoints, np.float32)[:len(cal_points)], np.array(cal_points,np.float32), cimg[0].shape, None, None)
+# ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1],None, 4,None,None,cv2.CALIB_ZERO_TANGENT_DIST,
+#                                                    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 2e-16))
+with open(path+'cal_matrix_radial.pkl', 'wb') as file:
     pickle.dump([ret, mtx, dist, rvecs, tvecs], file)
 
 
 timg = list()
-filenames = [filename for filename in os.listdir(path) if filename.endswith('1.jpg')]
+filenames = [filename for filename in os.listdir(path) if filename.endswith('3.jpg')]
 for file in filenames:
     img_raw = cv.imread(path+file)
     img_raw = cv.cvtColor(img_raw, cv.COLOR_BGR2GRAY)

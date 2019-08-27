@@ -19,6 +19,7 @@ from scipy import ndimage, spatial
 from mahotas.morph import hitmiss
 import os
 import pickle
+import pandas as pd
 
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
@@ -455,13 +456,13 @@ def getPerpCoord(aX, aY, bX, bY, length):
     dY = pY - vY * length
     return int(cX), int(cY), int(dX), int(dY)
 
-re_size = (32*5, 32*5)
+re_size = (24*10, 32*10)
 path = './trackpad_model_data/'
 
 if __name__ == '__main__':
     try:
-        xrg = 11
-        yrg = 11
+        xrg = 6
+        yrg = 6
         # cimg = [[[] for _ in range(yrg)] for _ in range(xrg)]
 
         # read and save images
@@ -476,21 +477,25 @@ if __name__ == '__main__':
         # with open(path + 'images_model.pkl', 'wb') as file:
         #     pickle.dump(cimg, file)
 
-        with open(path + 'temps_model_hot.pkl', 'rb') as file:
+        with open(path + 'temps_model_flat.pkl', 'rb') as file:
             temps = pickle.load(file)
 
         # with open(path + 'images_model.pkl', 'rb') as file:
         #     cimg = pickle.load(file)
         ftips = list()
         dist_list = [[0 for _ in range(xrg)] for _ in range(yrg)]
-        # for j in range(xrg):
-        #     for i in range(yrg):
-        for i in [6]:
-            for j in [4]:
+        tp_model = list()
+        # tp_model = pd.DataFrame(index=np.arange(0, xrg*yrg), columns=['i', 'j', 'xpos', 'ypos', 'h', 'h_rotate', 'dmax', 'finger_width'])
+        cnt = 0
+        for i in range(xrg):
+            for j in range(yrg):
+        # for i in [5]:
+        #     for j in [0]:
                 # img = np.mean(cimg[i][j], axis=0)
                 # img = cimg[i][j][int(len(cimg[i][j]) / 2)]
-                temp = np.amin(temps[i][j], axis=0)
+                temp = np.mean(temps[i][j], axis=0)
                 # temp = temps[i][j][int(len(temps[i][j]) / 2)]
+                # temp = temps[i][j][-2]
                 temp_scale = colorscale(temp, np.min(temp), np.max(temp))
                 # preprocess
                 img_raw = np.array([[0] * 32 for _ in range(24)], np.float)
@@ -501,229 +506,159 @@ if __name__ == '__main__':
                     img_raw[int(row)][int(col)] = x
                     img_scale[int(row)][int(col)] = temp_scale[k]
 
-                img_raw[img_raw < 140] = 0
+                img_raw[img_raw < 130] = 0
                 img_raw = cv.flip(img_raw, 0)
                 img_raw = cv.resize(img_raw, (len(img_raw[0])*10, len(img_raw)*10), interpolation=cv.INTER_CUBIC)
                 blur_raw = cv.GaussianBlur(img_raw, (25, 25), 0)
 
-                img_scale[img_scale < 140] = 0
+                img_scale[img_scale < 130] = 0
                 img = cv.flip(img_scale, 0)
                 img = cv.resize(img, (len(img[0]) * 10, len(img) * 10), interpolation=cv.INTER_CUBIC)
-                blur = cv.GaussianBlur(img, (25, 25), 0)
+                blur = cv.GaussianBlur(img, (31, 31), 0)
 
                 blur[blur < 0] = 0
                 blur_raw[blur_raw < 0] = 0
                 blur_bi = blur.astype(np.uint8)
                 # otsu binarization
                 ret, th0 = cv.threshold(blur_bi, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+                kerneld = cv.getStructuringElement(cv.MORPH_RECT, (7, 7))
+                th0 = cv.dilate(th0, kerneld)
+
                 # contour mask assuming the largest contour is hand
                 contours, hierarchy = cv.findContours(th0, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
                 areas = [cv.contourArea(c) for c in contours]
-                cnt = []
-                mask = np.zeros(th0.shape)
-                indextip = (0, 0)
-                if areas:
-                    max_index = np.argmax(areas)
-                    cnt = contours[max_index]
-                    # print(cnt)
+                dists = list()
 
-                    x, y, w, h = cv.boundingRect(cnt)
-                    cv.rectangle(blur, (x, h), (w, y), (0, 255, 0), 3)
+                if len(areas) == 0:
+                    continue
+                max_index = np.argmax(areas)
+                cnt = contours[max_index]
+                hull = cv.convexHull(cnt, returnPoints=False)
+                x, y, w, h = cv.boundingRect(cnt)
+                center = [int(x + w / 2), int(y + h / 2)]
+                mask = np.zeros_like(blur)
+                xmax = 0
+                ymin = 10000
+                xmin = 10000
+                p0 = 0
+                ifp = 0
+                ph = 0
+                iwb = 0
+                temp0 = np.zeros_like(blur)
+                for k in range(len(hull)):
+                    if cnt[hull[k]][0][0][0] > xmax:
+                        xmax = cnt[hull[k]][0][0][0]
+                        p0 = tuple(cnt[hull[k]][0][0])
+                        ifp = k
+                    if cnt[hull[k]][0][0][1] < ymin:
+                        ymin = cnt[hull[k]][0][0][1]
+                        ph = tuple(cnt[hull[k]][0][0])
+                    if cnt[hull[k]][0][0][0] <= xmin:
+                        if cnt[hull[k]][0][0][0] == xmin:
+                            if cnt[hull[k]][0][0][1] > cnt[hull[iwb]][0][0][1]:
+                                iwb = k
+                        xmin = cnt[hull[k]][0][0][0]
+                        iwb = k - 1
+                    if k < len(hull) - 1:
+                        cv.line(temp0, tuple(cnt[hull[k]][0][0]), tuple(cnt[hull[k + 1]][0][0]), [127, 255, 255], 3)
+                    else:
+                        cv.line(temp0, tuple(cnt[hull[k]][0][0]), tuple(cnt[hull[0]][0][0]), [127, 255, 255], 3)
+                pb = (0, 0)
+                pa = (0, 0)
+                pwb = tuple(cnt[hull[iwb]][0][0])
+                phb = (0, 0)
+                for k in range(len(hull)):
+                    phb = tuple(cnt[hull[iwb - k]][0][0])
+                    if distance(pwb, phb) > 40:
+                        break
+                slope_wp = (phb[1] - pwb[1]) / (phb[0] - pwb[0])
 
-                    hull = cv.convexHull(cnt, returnPoints=False)
-                    # print(hull)
-                    # break
-                    defects = cv.convexityDefects(cnt, hull)
-                    starts = list()
-                    ends = list()
-                    ymin = 1000
-                    xmax = 0
-                    distmax = 0
-                    p1 = 0
-                    p2 = 0
-                    for l in range(defects.shape[0]):
-                        s, e, f, d = defects[l, 0]
-                        start = tuple(cnt[s][0])
-                        end = tuple(cnt[e][0])
-                        if start[0] > xmax:
-                            xmax = start[0]
-                            p1 = start
-                        if start[1] < ymin:
-                            ymin = start[1]
-                            p2 = start
-                        if end[0] > xmax:
-                            xmax = end[0]
-                            p1 = end
-                        if end[1] < ymin:
-                            ymin = end[1]
-                            p2 = end
-                        # if distance(start) > distmax:
-                        #     distmax = distance(start)
-                        #     indextip = start
-                        # if distance(end) > distmax:
-                        #     distmax = distance(end)
-                        #     indextip = end
+                for k in range(len(hull)):
+                    pb = tuple(cnt[hull[ifp + k]][0][0])
+                    if distance(p0, pb) > 40:
+                        break
+                # measure finger width
+                # draw a line parallel with the finger
+                for k in range(len(hull)):
+                    pa = tuple(cnt[hull[ifp - k]][0][0])
+                    if distance(p0, pa) > 40:
+                        break
+                cv.line(blur, p0, pa, [127, 255, 255], 2)
+                # draw a line perpendicular to the finger
+                c0, c1, d0, d1 = getPerpCoord(p0[0], p0[1], pa[0], pa[1], 50)
+                tmp = np.zeros_like(blur, np.uint8)
+                cv.line(tmp, (c0, c1), (d0, d1), [255, 255, 255], 5)
+                ref = np.zeros_like(blur, np.uint8)
+                ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
+                # find intercept points of the line and the contour
+                (x_intercept, y_intercept) = np.nonzero(np.logical_and(tmp, ref))
+                # calculate distances between the points and the line
+                p1 = np.array(p0)
+                p2 = np.array(pa)
+                dists = list()
+                for m in range(len(x_intercept)):
+                    p3 = np.array([y_intercept[m], x_intercept[m]])
+                    cv.circle(blur, tuple(p3), 2, (0, 255, 255), -1)
+                    dist = abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
+                    if dist > 8 and dist < 40:
+                        dists.append(dist)
+                finger_width = np.nanmean(dists)
 
-                        # far = tuple(cnt[f][0])
-                        # cv.circle(blur, far, 5, (0, 255, 255), -1)
+                slope_fp = (p0[1] - pb[1]) / (p0[0] - pb[0])
+                # print(slope_wp, slope_fp, slope_wp-slope_fp)
+                cv.circle(temp0, p0, 10, (127, 255, 255), -1)
+                cv.circle(temp0, pb, 10, (127, 255, 255), -1)
+                cv.circle(temp0, pwb, 10, (127, 255, 255), -1)
+                cv.circle(temp0, phb, 10, (127, 255, 255), -1)
+                rect = cv.minAreaRect(cnt)
+                box = cv.boxPoints(rect)
+                box = np.int0(box)
+                h_rotated = distance(box[-1], box[-2])
 
-                    # cv.circle(blur, p1, 5, (0, 255, 255), -1)
-                    cv.line(blur, p1, p2, [255, 255, 255], 1)
-                    c0, c1, d0, d1 = getPerpCoord(p1[0], p1[1], p2[0], p2[1], 50)
-                    tmp = np.zeros_like(blur, np.uint8)
-                    cv.line(tmp, (c0, c1), (d0, d1), [255, 255, 255], 5)
-                    ref = np.zeros_like(blur, np.uint8)
-                    ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
-                    # Step #6d
-                    (x_intercept, y_intercept) = np.nonzero(np.logical_and(tmp, ref))
-                    p1 = np.array(p1)
-                    p2 = np.array(p2)
-                    dists = list()
-                    for m in range(len(x_intercept)):
-                        p3 = np.array([y_intercept[m], x_intercept[m]])
-                        cv.circle(blur, tuple(p3), 2, (0, 255, 255), -1)
-                        dist = abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
-                        if dist > 8 and dist < 40:
-                            dists.append(dist)
+                cv.rectangle(temp0, (x, y), (x + w, y + h), 255, 2)
+                cv.drawContours(temp0, [box], 0, (127, 0, 255), 2)
+                # cv.rectangle(temp0, (int(x-w/2), y), (int(x+w), y+h), 255, 2)
 
-                    cv.line(blur, (c0, c1), (d0, d1), [255, 255, 255], 5)
-                    # cv.drawContours(blur, cnt[hull], -1, (255, 255, 255), 2)
-                    # Create a mask from the largest contour
-                    cv.fillPoly(mask, [cnt], 1)
-                    # Use mask to crop data from original image
-                    th0 = np.multiply(th0, mask)
-                    blur0 = np.multiply(blur_raw, mask)
-                # skeletonize using Zhang-seun method
+                idy = 0
+                indextip = (0,0)
+                for cp in cnt:
+                    if abs(cp[0][0] - p0[0]) < 10 and cp[0][1] > p0[1]:
+                        if cp[0][1] > idy:
+                            idy = cp[0][1]
+                            indextip = tuple(cp[0])
+                cv.circle(blur, p0, 10, (127, 255, 255), -1)
+
                 th0 = th0.astype(np.bool)
-                th0_s = morphology.skeletonize(th0)
-                # calcualte endpoints using hit-or-miss
-                ep0 = endPoints(th0_s)
-                ep0_ind = np.where(ep0 == 1)
-                # fingertip is the endpoint furthest to a corner
-                indextip0 = [-1, -1]
-                if len(ep0_ind[0]) >= 1:
-                    indextip0 = find_fingertip(4, ep0_ind, re_size)
 
-                fit_points = find_nearestn([indextip0[1], indextip0[0]], cnt, 20)
-                # for p in fit_points:
-                #     cv.circle(blur, tuple(p[0]), 1, (255, 255, 255), -1)
-                rrect = cv.fitEllipse(fit_points)
-                cv.ellipse(blur, rrect, (255, 255, 255), 1, cv.LINE_AA)
-                # cv.drawContours(blur, [fit_points], -1, (255, 255, 255), 2)
-                mask_ft = np.zeros(th0.shape)
-
-                mask_ft = np.multiply(mask_ft, mask)
-
-                # th0[indextip0[0]:] = 0
-                cv.circle(blur, (indextip0[1], indextip0[0]), 2, (255, 255, 255), -1)
-                # area ratio
-                ar = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose()))
                 wr = np.sum(th0.transpose()[0]) / len(th0)
-                if len(dists) != 0:
-                    print('x:{}, y:{}, width:{}, area ratio:{}, wrist ratio:{}'.format(i, j, np.nanmin(dists), ar, wr))
-                    dist_list[i][j] = np.nanmin(dists)
-                # blur_raw = np.multiply(blur_raw, mask_ft.astype(bool))
-                #
-                # # cv.fillPoly(mask_ft, [cnt], 1)
-                # # plt.figure()
-                # # plt.imshow(th0_s, cmap='seismic')
-                # # plt.title(str(i)+'_'+str(j))
-                # # plt.show()
-                #
-                # ref = np.zeros_like(th0, np.uint8)
-                # ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
-                # # Define total number of angles we want
-                # N = 20
-                # dists = list()
-                # # Step #6
-                # lines = list()
-                # for l in range(N):
-                #     # Step #6b
-                #     theta = l * (360 / N)
-                #     theta *= np.pi / 180.0
-                #     # Step #6c
-                #     tmp = np.zeros_like(th0, np.uint8)
-                #
-                #     cv.line(tmp, (int(indextip0[1] - np.cos(theta) * 100),
-                #               int(indextip0[0] + np.sin(theta) * 100)),
-                #              (int(indextip0[1] + np.cos(theta) * 100),
-                #               int(indextip0[0] - np.sin(theta) * 100)), 255, 1)
-                #
-                #     # Step #6d
-                #     (y_intercept, x_intercept) = np.nonzero(np.logical_and(tmp, ref))
-                #     if len(x_intercept) < 2:
-                #         continue
-                #     elif len(x_intercept) == 2:
-                #         id0 = 0
-                #         id1 = 1
-                #     else:
-                #         id0 = 0
-                #         id1 = 0
-                #         for m, xp in enumerate(x_intercept):
-                #             if xp < indextip0[1]:
-                #                 continue
-                #             else:
-                #                 id0 = m-1
-                #                 id1 = m
-                #                 break
-                #
-                #     dist = math.sqrt((x_intercept[id0] - x_intercept[id1]) ** 2 + (y_intercept[id0] - y_intercept[id1]) ** 2)
-                #     if dist == 0:
-                #         continue
-                #     lines.append([(x_intercept[id0], y_intercept[id0]), (x_intercept[id1], y_intercept[id1])])
-                #     dists.append(dist)
-                # id_width = np.argmin(dists)
-                ftips.append([i, j, (indextip[1], indextip[0]), np.mean(blur_raw[blur_raw>0])])
-                # ftips.append([i, j, (indextip[1], indextip[0]), ])
-                # cv.line(blur, lines[id_width][0], lines[id_width][1], 0, 1)
-                # blur = cv.circle(blur, (indextip0[1], indextip0[0]), 5, (0, 127, 255), -1)
+                ar_full = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
 
-                plt.figure()
-                fig, ([ax0, ax1]) = plt.subplots(1,2)
-                ax0.imshow(blur, cmap='seismic')
-                ax1.imshow(th0, cmap='seismic')
-                plt.title(str(i) + '_' + str(j))
-                plt.show()
+                th0[indextip[1]:] = 0
+                ar = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
 
-                # # Step #6e
-                # cv.line(blur, (indextip0[1], indextip0[0]), (x_intercept[-1], y_intercept[-1]), 0, 1)
+                ph_d = (0, 0)
+                dmax = 0
+                for k in range(len(hull)):
+                    ptmp = np.array(cnt[hull[k]][0][0])
+                    dist = abs(np.cross(np.array(pwb) - np.array(indextip), np.array(indextip) - ptmp) /
+                               np.linalg.norm(np.array(pwb) - np.array(indextip)))
+                    if dist > dmax:
+                        dmax = dist
+                        ph_d = tuple(ptmp)
+                tp_model.append([i, j, tuple(indextip), tuple(ph), ph_d, h, h_rotated, dmax, finger_width])
+                if i == 0:
+                    fig, ([ax0, ax1, ax2]) = plt.subplots(1, 3)
+                    ax0.imshow(blur, cmap='seismic')
+                    ax1.imshow(th0, cmap='seismic')
+                    ax2.imshow(temp0, cmap='seismic')
+                    plt.title(str(i) + '_' + str(j))
+                    plt.show()
 
-                # blur = cv.circle(blur, (indextip0[1], indextip0[0]), 5, (0, 127, 255), -1)
+        # df_model = pd.DataFrame(tp_model,columns=['i', 'j', 'fingertip', 'ph', 'ph_d', 'h', 'h_rotate', 'dmax', 'finger_width'])
+        # print(df_model)
+        # df_model.to_csv('correction_model.csv')
 
 
-                # break
-
-        # for l in range(xrg):
-        #     tmp = list()
-        #     for item in ftips:
-        #         if item[1] == l:
-        #             tmp.append(item[-1])
-        #     print(tmp)
-        # plt.figure()
-        # plt.imshow(tmp, cmap='seismic')
-        # plt.show()
-        #
-        # plt.figure()
-        # plt.imshow(blur, cmap='seismic')
-        # plt.show()
-        # fig, (ax0) = plt.subplots(1, 1)
-        # im0 = ax0.imshow(np.random.uniform(low=20, high=35, size=re_size), cmap='seismic')
-        # plt.tight_layout()
-        # plt.ion()
-        # while True:
-        #
-        #     time_loop = round(time.monotonic() - time_start, 2)
-        #     tcnt = int(time_loop) // t
-        #     xcur = tcnt // xrg + 10
-        #     ycur = tcnt % yrg + 9
-        #     filename = str(xcur) + '_' + str(ycur) + '_' + str(time_loop)
-        #     if int(time_loop) % t < 3:
-        #         print('MOVE! x:{}, y:{}'.format(xcur, ycur))
-        #     else:
-        #         print('STAY! x:{}, y:{}'.format(xcur, ycur))
-        #         cv.imwrite(path+filename+'.jpg', img0)
-        #     im0.set_array(img0)
-        #     plt.pause(0.001)
 
     finally:
         cv.destroyAllWindows()
