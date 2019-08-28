@@ -601,12 +601,15 @@ if __name__ == '__main__':
             # cv.fillPoly(mask_ft, [cnt], 1)
             # defects = cv.convexityDefects(cnt, hull)
             xmax = 0
+            ymax = 0
             ymin = 10000
             xmin = 10000
-            p0 = 0
+            p0 = (0,0)
             ifp = 0
-            ph = 0
+            ph = (0,0)
             iwb = 0
+            p_bottom = (0,0)
+            ipb = 0
             temp0 = np.zeros_like(blur0)
             for i in range(len(hull)):
                 cv.circle(temp0, tuple(cnt[hull[i]][0][0]), 10, (127, 255, 255), -1)
@@ -614,6 +617,10 @@ if __name__ == '__main__':
                     xmax = cnt[hull[i]][0][0][0]
                     p0 = tuple(cnt[hull[i]][0][0])
                     ifp = i
+                if cnt[hull[i]][0][0][1] > ymax:
+                    ymax = cnt[hull[i]][0][0][1]
+                    p_bottom = tuple(cnt[hull[i]][0][0])
+                    ipb = i
                 if cnt[hull[i]][0][0][1] < ymin:
                     ymin = cnt[hull[i]][0][0][1]
                     ph = tuple(cnt[hull[i]][0][0])
@@ -798,8 +805,8 @@ if __name__ == '__main__':
             # hl.set_3d_properties(z_tp)
             # print('Lift FLAG:{0}, x:{1:.3f},  h:{2:.3f}, y:{3:.3f}, y_correct:{4:.3f},, ycorrrect:{5:.3f}, hcorrect:{6:.3f}'
             #       .format(lift_flag, dmax,  h, ycur, indextip0[0]+indextip0_correct, indextip0_correct, h_correction))
-            print('Lift FLAG:{0}, slope_wp:{1:.3f},  slope_ft:{2:.3f}, delta:{3:.3f}, slope_ft_abs:{4:.3f}, slope_ft_center:{5:.3f}, slope_phb:{6:.3f}'
-                .format(lift_flag, slope_wp, slope_fp, slope_wp-slope_fp, slope_ft_abs, slope_ft_center, slope_ft_phb))
+            print('Lift FLAG:{0}, slope_wp:{1:.3f},  slope_ft:{2:.3f}, delta:{3:.3f}, slope_ft_abs:{4:.3f}, slope_ft_center:{5:.3f}, dis:{6:.3f}'
+                .format(lift_flag, slope_wp, slope_fp, slope_wp-slope_fp, slope_ft_abs, slope_ft_center, distance(p_bottom, indextip0)))
             plt.pause(0.001)
     # except KeyboardInterrupt:
     #     with open(path + 'x_movement.pkl', 'wb') as file:

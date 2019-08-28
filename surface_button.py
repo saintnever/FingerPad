@@ -455,7 +455,7 @@ def distance(point1, point2=None):
 q0 = queue.Queue()
 q1 = queue.Queue()
 stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM16')
+data_reader0 = SerialReader(stop_event, q0, 'COM17')
 data_reader0.start()
 # data_reader1 = SerialReader(stop_event, q1, 'COM18')
 # data_reader1.start()
@@ -603,7 +603,7 @@ if __name__ == '__main__':
             xmax = 0
             ymin = 10000
             xmin = 10000
-            p0 = 0
+            p0 = (0, 0)
             ifp = 0
             ph = 0
             iwb = 0
@@ -647,7 +647,7 @@ if __name__ == '__main__':
                 pa = tuple(cnt[hull[ifp - i]][0][0])
                 if distance(p0, pa) > 40:
                     break
-            slope_ft_abs = (p0[1] - pa[1]) / (p0[0] - pa[0])
+            slope_ft_abs = (p0[1] - ph[1]) / (p0[0] - ph[0])
             slope_ft_center = (p0[1] - center[1]) / (p0[0] - center[0])
             slope_ft_phb = (p0[1] - phb[1]) / (p0[0] - phb[0])
 
@@ -727,9 +727,9 @@ if __name__ == '__main__':
             # print('finger width:{0:.3f}, maxDefect:{1:.3f}, area ratio:{2:.3f}, full ar:{3:.3f}, wrist ratio:{4:.3f}'.format(fw, distmax,
             #                                                                                                 ar, ar_full, wr))
             indextip0_correct = 0
-            if slope_wp - slope_fp > 1.2:
+            # if slope_wp - slope_fp > 1.2:
 
-            # if slope_fp < -1.5:
+            if slope_ft_abs < 0.8:
                 if lift_flag == 0:
                     print('LIFT')
                     lift_flag = 1
@@ -738,8 +738,8 @@ if __name__ == '__main__':
                     # with open(path + 'cross_movement_hot.pkl', 'wb') as file:
                     #     pickle.dump(ctemps, file)
                     # break
-            elif slope_wp-slope_fp < 0.8:
-            # elif slope_fp > -0.8:
+            # elif slope_wp-slope_fp < 0.8:
+            elif slope_ft_abs > 0.9:
                 dmax = 0
                 for i in range(len(hull)):
                     ptmp = np.array(cnt[hull[i]][0][0])
