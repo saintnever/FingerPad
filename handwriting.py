@@ -452,11 +452,11 @@ def distance(point1, point2=None):
     else:
         return math.sqrt(point1[0] ** 2 + point1[1] ** 2)
 
-q0 = queue.Queue()
-q1 = queue.Queue()
-stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM17')
-data_reader0.start()
+# q0 = queue.Queue()
+# q1 = queue.Queue()
+# stop_event = threading.Event()
+# data_reader0 = SerialReader(stop_event, q0, 'COM17')
+# data_reader0.start()
 # data_reader1 = SerialReader(stop_event, q1, 'COM18')
 # data_reader1.start()
 re_size = (24*10, 32*10)
@@ -483,10 +483,10 @@ if __name__ == '__main__':
         map_ax = map.add_subplot(111)
         #  Setting the axes properties
         # map_ax.set_xlim3d([0.0, 10.0])
-        map_ax.set_xlim([0.0, 10.0])
+        map_ax.set_xlim([0.0, 100.0])
         map_ax.set_xlabel('x')
         # map_ax.set_ylim3d([0.0, 10.0])
-        map_ax.set_ylim([0.0, 10.0])
+        map_ax.set_ylim([0.0, 100.0])
         map_ax.set_ylabel('y')
         # map_ax.set_zlim3d([10.0, 0.0])
         # map_ax.set_zlabel('z')
@@ -518,13 +518,13 @@ if __name__ == '__main__':
         fullar_prev = 0
         par_prev = 0
         lift_flag = 0
-        xcur = 5
-        ycur = 5
-        xcur_prev = 5
-        ycur_prev =1
-        hp = 5
-        yp = 5
-        x_origin = 1
+        xcur = 50
+        ycur = 50
+        xcur_prev = 50
+        ycur_prev = 50
+        hp = 60
+        yp = 50
+        x_origin = 50
         ph_origin = (0,0)
         x_re = 1
         dmax = 0
@@ -544,25 +544,21 @@ if __name__ == '__main__':
                         [0, 1, 0, 0]])
         # f.G = np.array([[0, 0, 1, 0],
         #                 [0, 0, 0, 1]]).transpose()
-        f.P *= 2000
-        f.R *= 10
-        f.Q = Q_discrete_white_noise(dim=4, dt=0.125, var=1)
+        f.P *= 1000
+        f.R *= 5
+        f.Q = Q_discrete_white_noise(dim=4, dt=0.125, var=0.5)
         f.F = np.array([[1, 0, 0.125, 0],
                         [0, 1, 0, 0.125],
                         [0, 0, 1, 0],
                         [0, 0, 0, 1]])
-        while True:
-            # print(time.time())
-            time0, temp_raw = q0.get()
-            ctemps.append([time0, temp_raw])
-            # continue
-            dtime = time0-timestamp_prev
+        with open(path + 'rect3_movement_hot.pkl', 'rb') as file:
+            ctemps_xv = pickle.load(file)
+
+        for enum, item in enumerate(ctemps_xv):
+            time0 = item[0]
+            temp0 = item[1]
+            dtime = time0 - timestamp_prev
             timestamp_prev = time0
-            q_temp.append(temp_raw)
-            if len(list(q_temp)) == mlen:
-                temp0 = np.average(np.array(q_temp), weights=range(1, mlen+1), axis=0)
-            else:
-                temp0 = temp_raw
             temp0 = colorscale(temp0, np.min(temp0), np.max(temp0))
             img0 = np.array([[0] * 32 for _ in range(24)], np.uint8)
             for i, x in enumerate(temp0):
@@ -779,7 +775,7 @@ if __name__ == '__main__':
                     #     pickle.dump(ctemps, file)
                     # break
             # elif slope_wp-slope_fp < 0.6:
-            elif slope_ft_abs > 0.7:
+            elif slope_ft_abs > 0.5:
                 dmax = 1
                 for i in range(len(hull)):
                     ptmp = np.array(cnt[hull[i]][0][0])
@@ -792,14 +788,12 @@ if __name__ == '__main__':
                 h_correction = h*abs(ph[0] - re_size[0]/2)/(re_size[0])*0.4
                 # dmax = h + h_correction
                 x_re = (60*216.7) / dmax
-                y_fts.append(indextip0[0]-yp)
-                h_fts.append(h-hp)
 
                 # print(np.std(y_fts))
                 # dmax = finger_width
                 # if 10 < ph[0] and indextip0[0] < re_size[0] - 3:
                 # if True:
-                if lift_flag == 1:
+                if enum == 1:
                     print('PUT DOWN!')
                     hp = h
                     lift_flag = 0
@@ -807,39 +801,17 @@ if __name__ == '__main__':
                     x_origin = x_re
                     indextip0_correct = 0
                     ph_origin = ph
-
                 else:
-                    # if len(y_fts) > n_avg:
-                        # print(np.std(y_fts[-n_avg:]), np.std(h_fts[-n_avg:]), np.std(y_fts[-n_avg:])/np.std(h_fts[-n_avg:]),
-                        #       np.mean(y_fts[-n_avg:]), np.mean(y_fts[-n_avg:]), np.mean(y_fts[-n_avg:])/np.mean(y_fts[-n_avg:]))
-                        # print(np.std(y_fts[-n_avg:]) / np.std(h_fts[-n_avg:]),
-                        #       np.mean(y_fts[-n_avg:]) / np.mean(h_fts[-n_avg:]))
-
-                        # print(np.max(y_fts[-n_avg:]), np.min(y_fts[-n_avg:]), np.max(h_fts[-n_avg:]), np.min(h_fts[-n_avg:]))
-
-                    if len(y_fts) >= n_avg+2 and vflag == 0 and hflag == 0:
-                        if np.std(y_fts[-n_avg:]) > 10 and np.std(h_fts[-n_avg:]) < 10:
-                        # if np.max(y_fts[-n_avg:]) - np.min(y_fts[-n_avg:]) > 20 and np.max(h_fts[-n_avg:]) - np.min(
-                        #         h_fts[-n_avg:]) < 20:
-                            print('vertical slider!')
-                            vflag = 1
-                        if np.std(y_fts[-n_avg:]) < 10 and np.std(h_fts[-n_avg:]) > 10:
-                        # if np.max(y_fts[-n_avg:]) - np.min(y_fts[-n_avg:]) < 20 and np.max(h_fts[-n_avg:]) - np.min(
-                        #         h_fts[-n_avg:]) > 20:
-                            print('Horizontal slider!')
-                            hflag = 1
-                    #     if np.std(y_fts[-8:]) < 10 and np.std(h_fts[-8:]) < 10:
-                    #         print('static')
                     dr = (hp - dmax) / dmax
-                    xcur = (x_re - x_origin)*0.2 + xcur_prev
-                    indextip0_correct = 3*(indextip0[0] - re_size[0] / 2) * (x_re - x_origin) / (x_origin)
-
-                    ycur = 20*(indextip0[0] + indextip0_correct - yp)/re_size[0] + ycur_prev
+                    xcur = (x_re - x_origin) + xcur_prev
+                    ycur = 0.5*0.46*(indextip0[0] - yp) + ycur_prev
+                    # indextip0_correct = 3*(indextip0[0] - re_size[0] / 2) * (x_re - x_origin) / (x_origin)
+                    # ycur = 20*(indextip0[0] + indextip0_correct - yp)/re_size[0] + ycur_prev
                     f.predict()
                     f.update([[xcur], [ycur]])
 
-                    xcur = confine(f.x[0][0], 0, 10)
-                    ycur = confine(f.x[1][0], 0, 10)
+                    xcur = confine(f.x[0][0], 0, 100)
+                    ycur = confine(f.x[1][0], 0, 100)
                     # x_tp = xcur
                     # y_tp = ycur
                     # xcur = confine(xcur, 0, 10)
@@ -860,7 +832,7 @@ if __name__ == '__main__':
 
             # z_tp = map_def(indextip0[1], 0, re_size[1], 0, 10)
             # print(x_tp, y_tp, z_tp)
-            # hl.set_data(xcur, ycur)
+            hl.set_data(xcur, ycur)
             # hl.set_3d_properties(z_tp)
             # print('Lift FLAG:{0}, x:{1:.3f},  h:{2:.3f}, y:{3:.3f}, y_correct:{4:.3f},, ycorrrect:{5:.3f}, hcorrect:{6:.3f}'
             #       .format(lift_flag, dmax,  h, ycur, indextip0[0]+indextip0_correct, indextip0_correct, h_correction))
@@ -874,6 +846,3 @@ if __name__ == '__main__':
     #     print(th0)
     finally:
         cv.destroyAllWindows()
-        stop_event.set()
-        data_reader0.clean()
-        data_reader0.clean()

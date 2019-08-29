@@ -455,7 +455,7 @@ def distance(point1, point2=None):
 q0 = queue.Queue()
 q1 = queue.Queue()
 stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM16')
+data_reader0 = SerialReader(stop_event, q0, 'COM17')
 data_reader0.start()
 # data_reader1 = SerialReader(stop_event, q1, 'COM18')
 # data_reader1.start()
@@ -599,7 +599,45 @@ if __name__ == '__main__':
             center = [int(x + w / 2), int(y + h / 2)]
             mask = np.zeros_like(blur0)
             # cv.fillPoly(mask_ft, [cnt], 1)
-            # defects = cv.convexityDefects(cnt, hull)
+            defects = cv.convexityDefects(cnt, hull)
+
+            distmax = 0
+            dist2max = 0
+            max_df = (0, 0)
+            max_d2f = (0, 0)
+            temp1 = np.zeros_like(blur0)
+            for l in range(1, defects.shape[0]-1):
+                s, e, fa, d = defects[l, 0]
+                start = tuple(cnt[s][0])
+                end = tuple(cnt[e][0])
+                far = tuple(cnt[fa][0])
+                cv.circle(temp1, far, 2, (127, 255, 255), -1)
+                # if start[0] > xmax:
+                #     xmax = start[0]
+                #     p1 = start
+                # if start[1] < ymin:
+                #     ymin = start[1]
+                #     p2 = start
+                # if end[0] > xmax:
+                #     xmax = end[0]
+                #     p1 = end
+                # if end[1] < ymin:
+                #     ymin = end[1]
+                #     p2 = end
+                # d2 = distance(far, tuple(cnt[fa-1][0])) + distance(far, tuple(cnt[fa+1][0]))
+                # if d2 > dist2max:
+                #     dist2max = d2
+                #     max_d2f = far
+                if d > distmax:
+                    distmax = d
+                    max_df = far
+
+            cv.circle(temp1, max_df, 5, (127, 255, 255), -1)
+            if max_df[0] > center[0]:
+                print('opened')
+            else:
+                print('closed')
+            im3.set_array(temp1)
             xmax = 0
             ymax = 0
             ymin = 10000
