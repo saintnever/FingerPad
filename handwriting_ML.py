@@ -23,22 +23,30 @@ for filename in filenames:
     result = filename.split('_')[0]
     if result[-2:] == '50':
         result = result[:-2]
-    if result == 'charT' or result == 'charA':
-        continue
+    # if result == 'charT' or result == 'charA':
+    #     continue
     # y_true = y_unique.index(result)
     for gesture in gesture_set:
         gesture = np.array(gesture).transpose()
         angle = gesture[0]
         amplitude = gesture[1]
         # print(max(amplitude), min(amplitude), np.mean(amplitude))
-        angle_large = list()
-        # for i in range(n):
-        #     for j, ang in enumerate(angle)
-        for idx, amp in enumerate(amplitude):
-            # if amp > np.mean(amplitude) * 0.1:
-            if amp > 0.7:
-            # if amp > np.quantile(amplitude, 0.25):
-                angle_large.append(angle[idx])
+        amp_hist = [[] for _ in range(n)]
+        angle_hist = [[] for _ in range(n)]
+
+        for i in range(n):
+            for j, ang in enumerate(angle):
+                if -180 + i*360/n <= ang < -180 + (i+1)*360/n:
+                    angle_hist[i].append(ang)
+                    amp_hist[i].append(amplitude[j])
+        x_ang = [0 for _ in range(n)]
+        x_amp = [0 for _ in range(n)]
+        for i in range(n):
+            x_ang[i] = len(angle_hist[i])
+            # x_amp[i] = np.mean(amp_hist[i])
+        # x_ang = x_ang/np.sum(x_ang)
+        # hist, avg = np.histogram(angle, bins=n, range=(-180, 180), density=False)
+        # print(x_ang, hist)
         # for i in range(-2, 2):
         #     angle_rotate = np.array(angle_large) + i
         #     for j, a in enumerate(angle_rotate):
@@ -48,13 +56,12 @@ for filename in filenames:
         #             angle_rotate[j] = 360 + a
             # angle_rotate[angle_rotate >= 360] = angle_rotate[angle_rotate >= 360] - 360
             # angle_rotate = [180 - angle for angle in angle_rotate if angle > 180 else angle]
-        hist, avg = np.histogram(angle_large, n, density=False)
+        hist, avg = np.histogram(angle, n, range=(-180, 180), density=False)
         x = hist/np.sum(hist)
-        # x = hist
         # angle_shift = int(20/(360/n))
         # for i in range(-angle_shift,angle_shift):
         # X.append(np.roll(x,i))
-        X.append(x)
+        X.append(x_ang)
         Y.append(result)
 
 X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.33, random_state=4)
@@ -65,7 +72,7 @@ clf = GridSearchCV(svc, parameters, cv=3)
 # clf = svm.SVC(kernel='poly', gamma='scale')
 clf.fit(X_train, Y_train)
 Y_predict = clf.predict(X_test)
-cfm = confusion_matrix(Y_test, Y_predict, labels=['check', 'cross', 'charZ'])
+cfm = confusion_matrix(Y_test, Y_predict, labels=['check', 'cross', 'charZ', 'charA', 'charT'])
 cfm = cfm / np.sum(cfm, axis=1)
 print('CF Maxtrix is {}, and accuracy is {}'.format(cfm, np.mean(np.diagonal(cfm))))
 
