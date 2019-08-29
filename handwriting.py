@@ -461,7 +461,7 @@ def distance(point1, point2=None):
 # data_reader1.start()
 re_size = (24*10, 32*10)
 plot_size = (32*10, 24*10)
-path = './cal_data/'
+path = './handwriting/'
 
 if __name__ == '__main__':
     try:
@@ -479,18 +479,18 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.ion()
 
-        map = plt.figure()
-        map_ax = map.add_subplot(111)
-        #  Setting the axes properties
-        # map_ax.set_xlim3d([0.0, 10.0])
-        map_ax.set_xlim([0.0, 100.0])
-        map_ax.set_xlabel('x')
-        # map_ax.set_ylim3d([0.0, 10.0])
-        map_ax.set_ylim([0.0, 100.0])
-        map_ax.set_ylabel('y')
-        # map_ax.set_zlim3d([10.0, 0.0])
-        # map_ax.set_zlabel('z')
-        hl, = map_ax.plot([0], [0], 'o',markersize=10)
+        # map = plt.figure()
+        # map_ax = map.add_subplot(111)
+        # #  Setting the axes properties
+        # # map_ax.set_xlim3d([0.0, 10.0])
+        # map_ax.set_xlim([-50.0, 50.0])
+        # map_ax.set_xlabel('x')
+        # # map_ax.set_ylim3d([0.0, 10.0])
+        # map_ax.set_ylim([-50.0, 50.0])
+        # map_ax.set_ylabel('y')
+        # # map_ax.set_zlim3d([10.0, 0.0])
+        # # map_ax.set_zlabel('z')
+        # hl, = map_ax.plot([0], [0], 'o',markersize=10)
 
         # fgbg = cv.createBackgroundSubtractorMOG2(history=5, detectShadows=False)
         mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
@@ -520,12 +520,14 @@ if __name__ == '__main__':
         lift_flag = 0
         xcur = 50
         ycur = 50
-        xcur_prev = 50
-        ycur_prev = 50
+        xcur_prev = 0
+        ycur_prev = 0
+        xkalman_prev = 0
+        ykalman_prev = 0
         hp = 60
         yp = 50
         x_origin = 50
-        ph_origin = (0,0)
+        ph_origin = (0, 0)
         x_re = 1
         dmax = 0
         h_correction = 0
@@ -533,249 +535,217 @@ if __name__ == '__main__':
         h_fts = list()
         vflag = 0
         hflag = 0
-        with open(path + 'cal_matrix.pkl', 'rb') as file:
-            [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
-        ctemps = []
+        # with open(path + 'cal_matrix.pkl', 'rb') as file:
+        #     [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
+        # ctemps = []
         n_avg = 6
-        f = KalmanFilter(dim_x=4, dim_z=2)
-        f.x = np.array([[5], [5], [0], [0]])
-
-        f.H = np.array([[1, 0, 0, 0],
-                        [0, 1, 0, 0]])
-        # f.G = np.array([[0, 0, 1, 0],
-        #                 [0, 0, 0, 1]]).transpose()
-        f.P *= 1000
-        f.R *= 5
-        f.Q = Q_discrete_white_noise(dim=4, dt=0.125, var=0.5)
-        f.F = np.array([[1, 0, 0.125, 0],
-                        [0, 1, 0, 0.125],
-                        [0, 0, 1, 0],
-                        [0, 0, 0, 1]])
-        with open(path + 'rect3_movement_hot.pkl', 'rb') as file:
+        fname = 'charA50'
+        with open(path + fname+'.pkl', 'rb') as file:
             ctemps_xv = pickle.load(file)
 
-        for enum, item in enumerate(ctemps_xv):
-            time0 = item[0]
-            temp0 = item[1]
-            dtime = time0 - timestamp_prev
-            timestamp_prev = time0
-            temp0 = colorscale(temp0, np.min(temp0), np.max(temp0))
-            img0 = np.array([[0] * 32 for _ in range(24)], np.uint8)
-            for i, x in enumerate(temp0):
-                row = i // 32
-                col = 31 - i % 32
-                img0[int(row)][int(col)] = x
-            img0[img0 < 80] = 0
-            img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
-
-            img0 = cv.flip(img0, 0)
-
-            # blur, opening, and erode
-            # kernelo = cv.getStructuringElement(cv.MORPH_ELLIPSE, (15, 15))
-            # img0 = cv.morphologyEx(img0, cv.MORPH_OPEN, kernelo)
-            # kerneld = cv.getStructuringElement(cv.MORPH_ELLIPSE, (11,11))
-            # img0 = cv.erode(img0, kerneld)
-            blur0 = cv.GaussianBlur(img0, (31, 31), 0)
-            ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-
-            # h, w = blur0.shape[:2]
-            # newcameramtx, roi = cv.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
-
-            # for img in cimg
-            # dst = cv.undistort(th0, mtx, dist, None, newCameraMatrix=newcameramtx)
-            # im3.set_array(dst)
-
-            contours, hierarchy = cv.findContours(th0, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
-
-            areas = [cv.contourArea(c) for c in contours]
-            dists = list()
-
-            if len(areas) == 0:
+        gesture_raw = list()
+        gesture_kalman = list()
+        for gesture in ctemps_xv:
+            # remove bad gesture
+            if len(gesture) == 0:
                 continue
-            max_index = np.argmax(areas)
-            cnt = contours[max_index]
-            hull = cv.convexHull(cnt, returnPoints=False)
-            x, y, w, h = cv.boundingRect(cnt)
-            center = [int(x + w / 2), int(y + h / 2)]
-            mask = np.zeros_like(blur0)
-            # cv.fillPoly(mask_ft, [cnt], 1)
-            defects = cv.convexityDefects(cnt, hull)
+            if gesture[-1][0] - gesture[0][0] < 0.3:
+                print('too short!')
+                continue
+            # reinit kalman filter
+            f = KalmanFilter(dim_x=4, dim_z=2)
+            f.x = np.array([[5], [5], [0], [0]])
 
-            distmax = 0
-            max_df = (0,0)
-            temp1 = np.zeros_like(blur0)
-            for l in range(defects.shape[0]):
-                s, e, fa, d = defects[l, 0]
-                start = tuple(cnt[s][0])
-                end = tuple(cnt[e][0])
-                far = tuple(cnt[fa][0])
-                cv.circle(temp1, far, 2, (127, 255, 255), -1)
-                # if start[0] > xmax:
-                #     xmax = start[0]
-                #     p1 = start
-                # if start[1] < ymin:
-                #     ymin = start[1]
-                #     p2 = start
-                # if end[0] > xmax:
-                #     xmax = end[0]
-                #     p1 = end
-                # if end[1] < ymin:
-                #     ymin = end[1]
-                #     p2 = end
-                if d > distmax:
-                    distmax = d
-                    max_df = far
-            cv.circle(temp1, max_df, 5, (127, 255, 255), -1)
-            im3.set_array(temp1)
-            xmax = 0
-            ymin = 10000
-            xmin = 10000
-            p0 = (0, 0)
-            ifp = 0
-            ph = 0
-            iwb = 0
-            temp0 = np.zeros_like(blur0)
-            for i in range(len(hull)):
-                cv.circle(temp0, tuple(cnt[hull[i]][0][0]), 10, (127, 255, 255), -1)
-                if cnt[hull[i]][0][0][0] > xmax:
-                    xmax = cnt[hull[i]][0][0][0]
-                    p0 = tuple(cnt[hull[i]][0][0])
-                    ifp = i
-                if cnt[hull[i]][0][0][1] < ymin:
-                    ymin = cnt[hull[i]][0][0][1]
-                    ph = tuple(cnt[hull[i]][0][0])
-                if cnt[hull[i]][0][0][0] <= xmin:
-                    if cnt[hull[i]][0][0][0] == xmin:
-                        if cnt[hull[i]][0][0][1] > cnt[hull[iwb]][0][0][1]:
-                            iwb = i
-                    xmin = cnt[hull[i]][0][0][0]
-                    iwb = i-1
-                if i < len(hull) - 1:
-                    cv.line(temp0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[i + 1]][0][0]), [127, 255, 255], 3)
-                else:
-                    cv.line(temp0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[0]][0][0]), [127, 255, 255], 3)
-            pb = (0,0)
-            pwb = tuple(cnt[hull[iwb]][0][0])
-            phb = (0,0)
-            for i in range(len(hull)):
-                phb = tuple(cnt[hull[iwb - i]][0][0])
-                if distance(pwb, phb) > 40:
-                    break
-            slope_wp = (phb[1] - pwb[1]) / (phb[0] - pwb[0])
+            f.H = np.array([[1, 0, 0, 0],
+                            [0, 1, 0, 0]])
+            # f.G = np.array([[0, 0, 1, 0],
+            #                 [0, 0, 0, 1]]).transpose()
+            f.P *= 1000
+            f.R *= 5
+            f.Q = Q_discrete_white_noise(dim=4, dt=0.125, var=0.5)
+            f.F = np.array([[1, 0, 0.125, 0],
+                            [0, 1, 0, 0.125],
+                            [0, 0, 1, 0],
+                            [0, 0, 0, 1]])
+            direction = list()
+            direction_kalman = list()
+            indextip0 = [0, 0]
+            xcur = 50
+            ycur = 50
+            xcur_prev = 0
+            ycur_prev = 0
+            xkalman_prev = 0
+            ykalman_prev = 0
+            for enum, item in enumerate(gesture):
+                time0 = item[0]
+                temp0 = item[1]
+                dtime = time0 - timestamp_prev
+                timestamp_prev = time0
+                temp0 = colorscale(temp0, np.min(temp0), np.max(temp0))
+                img0 = np.array([[0] * 32 for _ in range(24)], np.uint8)
+                for i, x in enumerate(temp0):
+                    row = i // 32
+                    col = 31 - i % 32
+                    img0[int(row)][int(col)] = x
+                img0[img0 < 80] = 0
+                img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
 
-            for i in range(len(hull)):
-                pb = tuple(cnt[hull[ifp+i]][0][0])
-                if distance(p0, pb) > 40:
-                    break
-            pa = (0, 0)
-            # measure finger width
-            # draw a line parallel with the finger
-            for i in range(len(hull)):
-                pa = tuple(cnt[hull[ifp - i]][0][0])
-                if distance(p0, pa) > 40:
-                    break
-            slope_ft_abs = (p0[1] - ph[1]) / (p0[0] - ph[0])
-            slope_ft_center = (p0[1] - center[1]) / (p0[0] - center[0])
-            slope_ft_phb = (p0[1] - phb[1]) / (p0[0] - phb[0])
+                img0 = cv.flip(img0, 0)
 
-            cv.line(blur0, p0, pa, [127, 255, 255], 5)
-            # draw a line perpendicular to the finger
-            c0, c1, d0, d1 = getPerpCoord(p0[0], p0[1], pa[0], pa[1], 50)
-            tmp = np.zeros_like(blur0, np.uint8)
-            cv.line(tmp, (c0, c1), (d0, d1), [255, 255, 255], 5)
-            ref = np.zeros_like(blur0, np.uint8)
-            ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
-            # find intercept points of the line and the contour
-            (x_intercept, y_intercept) = np.nonzero(np.logical_and(tmp, ref))
-            # calculate distances between the points and the line
-            p1 = np.array(p0)
-            p2 = np.array(pa)
-            dists = list()
-            for m in range(len(x_intercept)):
-                p3 = np.array([y_intercept[m], x_intercept[m]])
-                cv.circle(blur0, tuple(p3), 2, (0, 255, 255), -1)
-                dist = abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
-                if dist > 8 and dist < 40:
-                    dists.append(dist)
-            finger_width = np.nanmean(dists)
+                blur0 = cv.GaussianBlur(img0, (31, 31), 0)
+                ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
 
-            # find the point of palm fist bottom
-            for point in cnt:
-                if point[0][0] - ph[0] < 3:
-                    phb = tuple(point[0])
-            slope_fp = (p0[1] - phb[1]) / (p0[0] - phb[0])
-            # print(slope_wp, slope_fp, slope_wp-slope_fp)
-            cv.circle(temp0, p0, 10, (127, 255, 255), -1)
-            cv.circle(temp0, pb, 10, (127, 255, 255), -1)
-            cv.circle(temp0, pwb, 10, (0, 255, 255), -1)
-            cv.circle(temp0, phb, 10, (0, 255, 255), -1)
-            rect = cv.minAreaRect(cnt)
-            box = cv.boxPoints(rect)
-            box = np.int0(box)
+                contours, hierarchy = cv.findContours(th0, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
 
-            cv.rectangle(temp0, (x, y), (x+w, y+h), 255, 2)
-            cv.drawContours(temp0, [box], 0, (127, 0, 255), 2)
-            # cv.rectangle(temp0, (int(x-w/2), y), (int(x+w), y+h), 255, 2)
+                areas = [cv.contourArea(c) for c in contours]
+                dists = list()
 
-            idy = 0
-            for cp in cnt:
-                if abs(cp[0][0] - p0[0]) < 10 and cp[0][1] > p0[1]:
-                    if cp[0][1] > idy:
-                        idy = cp[0][1]
-                        indextip0 = tuple(cp[0])
+                if len(areas) == 0:
+                    continue
+                max_index = np.argmax(areas)
+                cnt = contours[max_index]
+                hull = cv.convexHull(cnt, returnPoints=False)
+                x, y, w, h = cv.boundingRect(cnt)
+                center = [int(x + w / 2), int(y + h / 2)]
+                mask = np.zeros_like(blur0)
+                # cv.fillPoly(mask_ft, [cnt], 1)
+                defects = cv.convexityDefects(cnt, hull)
 
-            th0 = th0.astype(np.bool)
-            # th0_s = morphology.skeletonize(th0)
-            # im4.set_array(th0_s)
+                distmax = 0
+                max_df = (0,0)
+                temp1 = np.zeros_like(blur0)
+                for l in range(defects.shape[0]):
+                    s, e, fa, d = defects[l, 0]
+                    start = tuple(cnt[s][0])
+                    end = tuple(cnt[e][0])
+                    far = tuple(cnt[fa][0])
+                    cv.circle(temp1, far, 2, (127, 255, 255), -1)
+                    if d > distmax:
+                        distmax = d
+                        max_df = far
+                cv.circle(temp1, max_df, 5, (127, 255, 255), -1)
+                im3.set_array(temp1)
+                xmax = 0
+                ymin = 10000
+                xmin = 10000
+                p0 = (0, 0)
+                ifp = 0
+                ph = 0
+                iwb = 0
+                temp0 = np.zeros_like(blur0)
+                for i in range(len(hull)):
+                    cv.circle(temp0, tuple(cnt[hull[i]][0][0]), 10, (127, 255, 255), -1)
+                    if cnt[hull[i]][0][0][0] > xmax:
+                        xmax = cnt[hull[i]][0][0][0]
+                        p0 = tuple(cnt[hull[i]][0][0])
+                        ifp = i
+                    if cnt[hull[i]][0][0][1] < ymin:
+                        ymin = cnt[hull[i]][0][0][1]
+                        ph = tuple(cnt[hull[i]][0][0])
+                    if cnt[hull[i]][0][0][0] <= xmin:
+                        if cnt[hull[i]][0][0][0] == xmin:
+                            if cnt[hull[i]][0][0][1] > cnt[hull[iwb]][0][0][1]:
+                                iwb = i
+                        xmin = cnt[hull[i]][0][0][0]
+                        iwb = i-1
+                    if i < len(hull) - 1:
+                        cv.line(temp0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[i + 1]][0][0]), [127, 255, 255], 3)
+                    else:
+                        cv.line(temp0, tuple(cnt[hull[i]][0][0]), tuple(cnt[hull[0]][0][0]), [127, 255, 255], 3)
+                pb = (0,0)
+                pwb = tuple(cnt[hull[iwb]][0][0])
+                phb = (0,0)
+                for i in range(len(hull)):
+                    phb = tuple(cnt[hull[iwb - i]][0][0])
+                    if distance(pwb, phb) > 40:
+                        break
+                slope_wp = (phb[1] - pwb[1]) / (phb[0] - pwb[0])
 
-            wr = np.sum(th0.transpose()[0]) / len(th0)
-            ar_full = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
+                for i in range(len(hull)):
+                    pb = tuple(cnt[hull[ifp+i]][0][0])
+                    if distance(p0, pb) > 40:
+                        break
+                pa = (0, 0)
+                # measure finger width
+                # draw a line parallel with the finger
+                for i in range(len(hull)):
+                    pa = tuple(cnt[hull[ifp - i]][0][0])
+                    if distance(p0, pa) > 40:
+                        break
+                slope_ft_abs = (p0[1] - ph[1]) / (p0[0] - ph[0])
+                slope_ft_center = (p0[1] - center[1]) / (p0[0] - center[0])
+                slope_ft_phb = (p0[1] - phb[1]) / (p0[0] - phb[0])
 
-            th0[indextip0[1]:] = 0
-            # for i, item in enumerate(th0):
-            #     th0[i][:center[1]] = 0
-            # th0 = np.multiply(th0, mask)
-            im2.set_array(th0)
-            ar = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
+                cv.line(blur0, p0, pa, [127, 255, 255], 5)
+                # draw a line perpendicular to the finger
+                c0, c1, d0, d1 = getPerpCoord(p0[0], p0[1], pa[0], pa[1], 50)
+                tmp = np.zeros_like(blur0, np.uint8)
+                cv.line(tmp, (c0, c1), (d0, d1), [255, 255, 255], 5)
+                ref = np.zeros_like(blur0, np.uint8)
+                ref = cv.drawContours(ref, [cnt], -1, (255, 255, 255), 1)
+                # find intercept points of the line and the contour
+                (x_intercept, y_intercept) = np.nonzero(np.logical_and(tmp, ref))
+                # calculate distances between the points and the line
+                p1 = np.array(p0)
+                p2 = np.array(pa)
+                dists = list()
+                for m in range(len(x_intercept)):
+                    p3 = np.array([y_intercept[m], x_intercept[m]])
+                    cv.circle(blur0, tuple(p3), 2, (0, 255, 255), -1)
+                    dist = abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
+                    if dist > 8 and dist < 40:
+                        dists.append(dist)
+                finger_width = np.nanmean(dists)
 
-            # q_ar.append(ar)
-            # if len(list(q_ar)) == mlen:
-            #     ar = np.average(list(q_ar), weights=range(1, mlen+1), axis=0)
-            # dtime = 1
-            v_x = (indextip0[0] - indextip0_prev[0]) / dtime
-            v_lift = (indextip0[1] - indextip0_prev[1]) / dtime
-            v_far = (ar_full - fullar_prev) / dtime
-            v_par = (ar - par_prev) / dtime
-            # v_x = log_transform(v_x)
-            # v_lift = log_transform(v_lift)
-            # v_far = log_transform(v_far)
-            # v_par = log_transform(v_par)
-            dr = 0
-            fw = 0
+                # find the point of palm fist bottom
+                for point in cnt:
+                    if point[0][0] - ph[0] < 3:
+                        phb = tuple(point[0])
+                slope_fp = (p0[1] - phb[1]) / (p0[0] - phb[0])
+                # print(slope_wp, slope_fp, slope_wp-slope_fp)
+                cv.circle(temp0, p0, 10, (127, 255, 255), -1)
+                cv.circle(temp0, pb, 10, (127, 255, 255), -1)
+                cv.circle(temp0, pwb, 10, (0, 255, 255), -1)
+                cv.circle(temp0, phb, 10, (0, 255, 255), -1)
+                rect = cv.minAreaRect(cnt)
+                box = cv.boxPoints(rect)
+                box = np.int0(box)
 
-            if len(dists) != 0:
-                fw = np.nanmin(dists)
-            # print(slope_fp)
-            # print('finger width:{0:.3f}, maxDefect:{1:.3f}, area ratio:{2:.3f}, full ar:{3:.3f}, wrist ratio:{4:.3f}'.format(fw, distmax,
-            #                                                                                                 ar, ar_full, wr))
-            indextip0_correct = 0
+                cv.rectangle(temp0, (x, y), (x+w, y+h), 255, 2)
+                cv.drawContours(temp0, [box], 0, (127, 0, 255), 2)
+                # cv.rectangle(temp0, (int(x-w/2), y), (int(x+w), y+h), 255, 2)
 
-            # if slope_wp - slope_fp > 1:
-            if slope_ft_abs < 0.5:
-                if lift_flag == 0:
-                    print('LIFT')
-                    lift_flag = 1
-                    xcur_prev = xcur
-                    ycur_prev = ycur
-                    y_fts = list()
-                    h_fts = list()
-                    vflag = 0
-                    hflag = 0
-                    # with open(path + 'cross_movement_hot.pkl', 'wb') as file:
-                    #     pickle.dump(ctemps, file)
-                    # break
-            # elif slope_wp-slope_fp < 0.6:
-            elif slope_ft_abs > 0.5:
+                idy = 0
+                for cp in cnt:
+                    if abs(cp[0][0] - p0[0]) < 10 and cp[0][1] > p0[1]:
+                        if cp[0][1] > idy:
+                            idy = cp[0][1]
+                            indextip0 = tuple(cp[0])
+
+                th0 = th0.astype(np.bool)
+                # th0_s = morphology.skeletonize(th0)
+                # im4.set_array(th0_s)
+
+                wr = np.sum(th0.transpose()[0]) / len(th0)
+                ar_full = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
+
+                th0[indextip0[1]:] = 0
+                # for i, item in enumerate(th0):
+                #     th0[i][:center[1]] = 0
+                # th0 = np.multiply(th0, mask)
+                im2.set_array(th0)
+                ar = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
+
+                dr = 0
+                fw = 0
+
+                if len(dists) != 0:
+                    fw = np.nanmin(dists)
+                # print(slope_fp)
+                # print('finger width:{0:.3f}, maxDefect:{1:.3f}, area ratio:{2:.3f}, full ar:{3:.3f}, wrist ratio:{4:.3f}'.format(fw, distmax,
+                #                                                                                                 ar, ar_full, wr))
+                indextip0_correct = 0
+
                 dmax = 1
                 for i in range(len(hull)):
                     ptmp = np.array(cnt[hull[i]][0][0])
@@ -801,48 +771,70 @@ if __name__ == '__main__':
                     x_origin = x_re
                     indextip0_correct = 0
                     ph_origin = ph
-                else:
+                    xkalman_prev = 0
+                    ykalman_prev = 0
+                elif enum > 1:
                     dr = (hp - dmax) / dmax
-                    xcur = (x_re - x_origin) + xcur_prev
-                    ycur = 0.5*0.46*(indextip0[0] - yp) + ycur_prev
+                    xcur = (x_re - x_origin)
                     # indextip0_correct = 3*(indextip0[0] - re_size[0] / 2) * (x_re - x_origin) / (x_origin)
+                    ycur = 0.5*0.46*(indextip0[0] - yp)
+                    x_mov = xcur - xcur_prev
+                    y_mov = ycur - ycur_prev
+                    direction.append([np.arctan2(y_mov, x_mov)*180/np.pi, math.sqrt(x_mov**2 + y_mov**2)])
+                    xcur_prev = xcur
+                    ycur_prev = ycur
                     # ycur = 20*(indextip0[0] + indextip0_correct - yp)/re_size[0] + ycur_prev
                     f.predict()
                     f.update([[xcur], [ycur]])
-
-                    xcur = confine(f.x[0][0], 0, 100)
-                    ycur = confine(f.x[1][0], 0, 100)
+                    x_kalman_mov = f.x[0][0] - xkalman_prev
+                    y_kalman_mov = f.x[1][0] - ykalman_prev
+                    direction_kalman.append([np.arctan2(y_kalman_mov, x_kalman_mov)*180/np.pi,
+                                             math.sqrt(x_kalman_mov**2 + y_kalman_mov**2)])
+                    xkalman_prev = f.x[0][0]
+                    ykalman_prev = f.x[1][0]
+                    xcur = confine(f.x[0][0], -50, 50)
+                    ycur = confine(f.x[1][0], -50, 50)
                     # x_tp = xcur
                     # y_tp = ycur
                     # xcur = confine(xcur, 0, 10)
                     # ycur = confine(ycur, 0, 10)
-            im1.set_array(temp0)
 
-            fullar_prev = ar_full
-            par_prev = ar
-            indextip0_prev = indextip0
-            # d_est = (60*216.7)/(indextip0[1]-ph[1])
-            # d_est = dr*indextip0[1] + indextip0[1]
-            # print('Lift FLAG:{0}, par:{1:.3f}, far:{2:.3f}, vx:{3:.3f}, vy:{4:.3f}, v-par:{5:.3f}, v-far:{6:.3f}, distance:{7:.3f}'.
-            #       format(lift_flag, ar, ar_full, v_x, v_lift, v_par, v_far, dr))
+                im1.set_array(temp0)
 
-            blur0 = cv.circle(blur0, tuple(indextip0), 10, (127, 127, 255), -1)
-            im0.set_array(blur0)
-            # 3D plot
+                fullar_prev = ar_full
+                par_prev = ar
+                indextip0_prev = indextip0
+                # d_est = (60*216.7)/(indextip0[1]-ph[1])
+                # d_est = dr*indextip0[1] + indextip0[1]
+                # print('Lift FLAG:{0}, par:{1:.3f}, far:{2:.3f}, vx:{3:.3f}, vy:{4:.3f}, v-par:{5:.3f}, v-far:{6:.3f}, distance:{7:.3f}'.
+                #       format(lift_flag, ar, ar_full, v_x, v_lift, v_par, v_far, dr))
 
-            # z_tp = map_def(indextip0[1], 0, re_size[1], 0, 10)
-            # print(x_tp, y_tp, z_tp)
-            hl.set_data(xcur, ycur)
-            # hl.set_3d_properties(z_tp)
-            # print('Lift FLAG:{0}, x:{1:.3f},  h:{2:.3f}, y:{3:.3f}, y_correct:{4:.3f},, ycorrrect:{5:.3f}, hcorrect:{6:.3f}'
-            #       .format(lift_flag, dmax,  h, ycur, indextip0[0]+indextip0_correct, indextip0_correct, h_correction))
-            print('Lift FLAG:{0}, slope_wp:{1:.3f},  slope_fp:{2:.3f}, delta:{3:.3f}, slope_ft_abs:{4:.3f}, slope_ft_center:{5:.3f}, slope_phb:{6:.3f}'
-                .format(lift_flag, slope_wp, slope_fp, slope_wp-slope_fp, slope_ft_abs, slope_ft_center, slope_ft_phb))
-            plt.pause(0.001)
-    # except KeyboardInterrupt:
-    #     with open(path + 'x_movement.pkl', 'wb') as file:
-    #         pickle.dump(cimg, file)
-    # except ValueError:
-    #     print(th0)
+                blur0 = cv.circle(blur0, tuple(indextip0), 10, (127, 127, 255), -1)
+                im0.set_array(blur0)
+                # 3D plot
+
+                # z_tp = map_def(indextip0[1], 0, re_size[1], 0, 10)
+                # print(x_tp, y_tp, z_tp)
+                # hl.set_data(xcur, ycur)
+                # hl.set_3d_properties(z_tp)
+                # print('Lift FLAG:{0}, x:{1:.3f},  h:{2:.3f}, y:{3:.3f}, y_correct:{4:.3f},, ycorrrect:{5:.3f}, hcorrect:{6:.3f}'
+                #       .format(lift_flag, dmax,  h, ycur, indextip0[0]+indextip0_correct, indextip0_correct, h_correction))
+                # print('Lift FLAG:{0}, slope_wp:{1:.3f},  slope_fp:{2:.3f}, delta:{3:.3f}, slope_ft_abs:{4:.3f}, slope_ft_center:{5:.3f}, slope_phb:{6:.3f}'
+                #     .format(lift_flag, slope_wp, slope_fp, slope_wp-slope_fp, slope_ft_abs, slope_ft_center, slope_ft_phb))
+                # plt.pause(0.001)
+            # hist, avg = np.histogram(direction, 18)
+            #
+            # hist_kalman, avg_kalman = np.histogram(direction_kalman, 18)
+            gesture_raw.append(direction)
+            gesture_kalman.append(direction_kalman)
+            # print(hist / np.sum(hist), avg)
+            # print(hist_kalman / np.sum(hist_kalman), avg_kalman)
+        with open(path+fname+'_dir.pkl', 'wb') as file:
+            pickle.dump([gesture_raw, gesture_kalman], file)
+        # except KeyboardInterrupt:
+        #     with open(path + 'x_movement.pkl', 'wb') as file:
+        #         pickle.dump(cimg, file)
+        # except ValueError:
+        #     print(th0)
     finally:
         cv.destroyAllWindows()

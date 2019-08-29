@@ -455,7 +455,7 @@ def distance(point1, point2=None):
 q0 = queue.Queue()
 q1 = queue.Queue()
 stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM17')
+data_reader0 = SerialReader(stop_event, q0, 'COM16')
 data_reader0.start()
 # data_reader1 = SerialReader(stop_event, q1, 'COM18')
 # data_reader1.start()
@@ -836,27 +836,6 @@ if __name__ == '__main__':
                 else:
                     if record_flag == 1:
                         temp_record.append([time0, temp_raw])
-                    # if len(y_fts) > n_avg:
-                        # print(np.std(y_fts[-n_avg:]), np.std(h_fts[-n_avg:]), np.std(y_fts[-n_avg:])/np.std(h_fts[-n_avg:]),
-                        #       np.mean(y_fts[-n_avg:]), np.mean(y_fts[-n_avg:]), np.mean(y_fts[-n_avg:])/np.mean(y_fts[-n_avg:]))
-                        # print(np.std(y_fts[-n_avg:]) / np.std(h_fts[-n_avg:]),
-                        #       np.mean(y_fts[-n_avg:]) / np.mean(h_fts[-n_avg:]))
-
-                        # print(np.max(y_fts[-n_avg:]), np.min(y_fts[-n_avg:]), np.max(h_fts[-n_avg:]), np.min(h_fts[-n_avg:]))
-
-                    # if len(y_fts) >= n_avg+2 and vflag == 0 and hflag == 0:
-                    #     if np.std(y_fts[-n_avg:]) > 10 and np.std(h_fts[-n_avg:]) < 10:
-                    #     # if np.max(y_fts[-n_avg:]) - np.min(y_fts[-n_avg:]) > 20 and np.max(h_fts[-n_avg:]) - np.min(
-                    #     #         h_fts[-n_avg:]) < 20:
-                    #         print('vertical slider!')
-                    #         vflag = 1
-                    #     if np.std(y_fts[-n_avg:]) < 10 and np.std(h_fts[-n_avg:]) > 10:
-                    #     # if np.max(y_fts[-n_avg:]) - np.min(y_fts[-n_avg:]) < 20 and np.max(h_fts[-n_avg:]) - np.min(
-                    #     #         h_fts[-n_avg:]) > 20:
-                    #         print('Horizontal slider!')
-                    #         hflag = 1
-                    #     if np.std(y_fts[-8:]) < 10 and np.std(h_fts[-8:]) < 10:
-                    #         print('static')
                     dr = (hp - dmax) / dmax
                     xcur = (x_re - x_origin)*0.2 + xcur_prev
                     indextip0_correct = 3*(indextip0[0] - re_size[0] / 2) * (x_re - x_origin) / (x_origin)
@@ -894,7 +873,7 @@ if __name__ == '__main__':
             # print('Lift FLAG:{0}, slope_wp:{1:.3f},  slope_fp:{2:.3f}, delta:{3:.3f}, slope_ft_abs:{4:.3f}, slope_ft_center:{5:.3f}, slope_phb:{6:.3f}'
             #     .format(lift_flag, slope_wp, slope_fp, slope_wp-slope_fp, slope_ft_abs, slope_ft_center, slope_ft_phb))
             plt.pause(0.001)
-        with open('char_Z.pkl', 'wb') as file:
+        with open('charB100.pkl', 'wb') as file:
             pickle.dump(gesture_record, file)
     # except KeyboardInterrupt:
     #     with open(path + 'x_movement.pkl', 'wb') as file:
