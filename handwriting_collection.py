@@ -21,7 +21,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import pickle
 from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
-
+import argparse
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
         threading.Thread.__init__(self)
@@ -453,23 +453,23 @@ def distance(point1, point2=None):
         return math.sqrt(point1[0] ** 2 + point1[1] ** 2)
 
 q0 = queue.Queue()
-q1 = queue.Queue()
 stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM16')
+data_reader0 = SerialReader(stop_event, q0, 'COM17')
 data_reader0.start()
 # data_reader1 = SerialReader(stop_event, q1, 'COM18')
 # data_reader1.start()
 re_size = (24*10, 32*10)
 plot_size = (32*10, 24*10)
-path = './cal_data/'
+path = './handwriting/'
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("user", help="User name",default='test')
+    parser.add_argument("symbol", help="Symbol drawed",default='test')
+    parser.add_argument("cnt",  help="Number of gestures intended to collect", default=60, type=int)
+    args = parser.parse_args()
     try:
         fig, ([ax0, ax1], [ax2, ax3], [ax4, ax5]) = plt.subplots(3, 2)
-        # im1 = ax1.imshow(np.random.uniform(low=22, high=32, size=(20, 36)), vmin=20, vmax=36, cmap='jet')
-        #                  # interpolation='lanczos')
-        # im0 = ax0.imshow(np.random.uniform(low=22, high=32, size=(20, 36)), vmin=20, vmax=36, cmap='jet')
-        #                  # interpolation='lanczos')
         im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
         im1 = ax1.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
         im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
@@ -499,7 +499,6 @@ if __name__ == '__main__':
         q_ft = deque(maxlen=mlen)
         q_ar = deque(maxlen=mlen)
         q_temp = deque(maxlen=mlen)
-        indextip0 = [0, 0]
         indextip1 = [0, 0]
         indextip0_prev = [0, 0]
         indextip1_prev = [0, 0]
@@ -518,10 +517,6 @@ if __name__ == '__main__':
         fullar_prev = 0
         par_prev = 0
         lift_flag = -1
-        xcur = 5
-        ycur = 5
-        xcur_prev = 5
-        ycur_prev =1
         hp = 5
         yp = 5
         x_origin = 1
@@ -533,29 +528,49 @@ if __name__ == '__main__':
         h_fts = list()
         vflag = 0
         hflag = 0
-        with open(path + 'cal_matrix.pkl', 'rb') as file:
-            [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
         ctemps = []
         n_avg = 6
-        f = KalmanFilter(dim_x=4, dim_z=2)
-        f.x = np.array([[5], [5], [0], [0]])
-
-        f.H = np.array([[1, 0, 0, 0],
-                        [0, 1, 0, 0]])
-        # f.G = np.array([[0, 0, 1, 0],
-        #                 [0, 0, 0, 1]]).transpose()
-        f.P *= 2000
-        f.R *= 10
-        f.Q = Q_discrete_white_noise(dim=4, dt=0.125, var=1)
-        f.F = np.array([[1, 0, 0.125, 0],
-                        [0, 1, 0, 0.125],
-                        [0, 0, 1, 0],
-                        [0, 0, 0, 1]])
+        # f = KalmanFilter(dim_x=4, dim_z=2)
+        # f.x = np.array([[5], [5], [0], [0]])
+        #
+        # f.H = np.array([[1, 0, 0, 0],
+        #                 [0, 1, 0, 0]])
+        # # f.G = np.array([[0, 0, 1, 0],
+        # #                 [0, 0, 0, 1]]).transpose()
+        # f.P *= 1000
+        # f.R *= 5
+        # f.Q = Q_discrete_white_noise(dim=4, dt=0.125, var=0.5)
+        # f.F = np.array([[1, 0, 0.125, 0],
+        #                 [0, 1, 0, 0.125],
+        #                 [0, 0, 1, 0],
+        #                 [0, 0, 0, 1]])
         temp_record = list()
         gesture_record = list()
         record_flag = 0
         gesture_cnt = 0
-        while gesture_cnt < 50:
+        # direction = list()
+        # direction_kalman = list()
+        # indextip0 = [0, 0]
+        # xcur = 50
+        # ycur = 50
+        # xcur_prev = 0
+        # ycur_prev = 0
+        # xkalman_prev = 0
+        # ykalman_prev = 0
+        gesture_raw = list()
+        gesture_kalman = list()
+        name = args.user
+        fname = args.symbol
+        direction = list()
+        direction_kalman = list()
+        indextip0 = [0, 0]
+        xcur = 50
+        ycur = 50
+        xcur_prev = 0
+        ycur_prev = 0
+        xkalman_prev = 0
+        ykalman_prev = 0
+        while gesture_cnt < args.cnt:
             # print(time.time())
             time0, temp_raw = q0.get()
             ctemps.append([time0, temp_raw])
@@ -578,11 +593,6 @@ if __name__ == '__main__':
 
             img0 = cv.flip(img0, 0)
 
-            # blur, opening, and erode
-            # kernelo = cv.getStructuringElement(cv.MORPH_ELLIPSE, (15, 15))
-            # img0 = cv.morphologyEx(img0, cv.MORPH_OPEN, kernelo)
-            # kerneld = cv.getStructuringElement(cv.MORPH_ELLIPSE, (11,11))
-            # img0 = cv.erode(img0, kerneld)
             blur0 = cv.GaussianBlur(img0, (31, 31), 0)
             ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
 
@@ -618,18 +628,6 @@ if __name__ == '__main__':
                 end = tuple(cnt[e][0])
                 far = tuple(cnt[fa][0])
                 cv.circle(temp1, far, 2, (127, 255, 255), -1)
-                # if start[0] > xmax:
-                #     xmax = start[0]
-                #     p1 = start
-                # if start[1] < ymin:
-                #     ymin = start[1]
-                #     p2 = start
-                # if end[0] > xmax:
-                #     xmax = end[0]
-                #     p1 = end
-                # if end[1] < ymin:
-                #     ymin = end[1]
-                #     p2 = end
                 if d > distmax:
                     distmax = d
                     max_df = far
@@ -745,19 +743,6 @@ if __name__ == '__main__':
             # th0 = np.multiply(th0, mask)
             im2.set_array(th0)
             ar = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
-
-            # q_ar.append(ar)
-            # if len(list(q_ar)) == mlen:
-            #     ar = np.average(list(q_ar), weights=range(1, mlen+1), axis=0)
-            # dtime = 1
-            v_x = (indextip0[0] - indextip0_prev[0]) / dtime
-            v_lift = (indextip0[1] - indextip0_prev[1]) / dtime
-            v_far = (ar_full - fullar_prev) / dtime
-            v_par = (ar - par_prev) / dtime
-            # v_x = log_transform(v_x)
-            # v_lift = log_transform(v_lift)
-            # v_far = log_transform(v_far)
-            # v_par = log_transform(v_par)
             dr = 0
             fw = 0
 
@@ -771,15 +756,17 @@ if __name__ == '__main__':
             # if slope_wp - slope_fp > 1:
             if slope_ft_abs < 0.5:
                 if lift_flag == 0:
-                    print('LIFT')
-                    print('stop record')
+                    print('LIFT, stop record')
                     if len(temp_record) > 0:
                         if temp_record[-1][0] - temp_record[0][0] < 1:
                             print('bad gesture!')
+                            temp_record = list()
                         else:
                             gesture_record.append(temp_record)
                             gesture_cnt += 1
                             print('Gesture {}'.format(gesture_cnt))
+                            gesture_raw.append(direction)
+                            gesture_kalman.append(direction_kalman)
                     temp_record = list()
                     record_flag = 0
                     lift_flag = 1
@@ -793,9 +780,7 @@ if __name__ == '__main__':
                     print('init LIFT')
                     lift_flag = -1
                     record_flag = 0
-                    # with open(path + 'cross_movement_hot.pkl', 'wb') as file:
-                    #     pickle.dump(ctemps, file)
-                    # break
+
             # elif slope_wp-slope_fp < 0.6:
             elif slope_ft_abs > 0.7:
                 dmax = 1
@@ -817,9 +802,8 @@ if __name__ == '__main__':
                 # dmax = finger_width
                 # if 10 < ph[0] and indextip0[0] < re_size[0] - 3:
                 # if True:
-                if lift_flag == 1:
-                    print('PUT DOWN!')
-                    print('start record')
+                if lift_flag == 1 or lift_flag == -1:
+                    print(' start record')
                     hp = h
                     lift_flag = 0
                     yp = indextip0[0]
@@ -827,29 +811,58 @@ if __name__ == '__main__':
                     indextip0_correct = 0
                     ph_origin = ph
                     record_flag = 1
-                elif lift_flag == -1:
-                    print('start record')
-                    temp_record.append([time0, temp_raw])
+                    f = KalmanFilter(dim_x=4, dim_z=2)
+                    f.x = np.array([[5], [5], [0], [0]])
 
-                    lift_flag = 0
-                    record_flag = 1
+                    f.H = np.array([[1, 0, 0, 0],
+                                    [0, 1, 0, 0]])
+                    # f.G = np.array([[0, 0, 1, 0],
+                    #                 [0, 0, 0, 1]]).transpose()
+                    f.P *= 1000
+                    f.R *= 5
+                    f.Q = Q_discrete_white_noise(dim=4, dt=0.125, var=0.5)
+                    f.F = np.array([[1, 0, 0.125, 0],
+                                    [0, 1, 0, 0.125],
+                                    [0, 0, 1, 0],
+                                    [0, 0, 0, 1]])
+                    direction = list()
+                    direction_kalman = list()
+                    indextip0 = [0, 0]
+                    xcur = 50
+                    ycur = 50
+                    xcur_prev = 0
+                    ycur_prev = 0
+                    xkalman_prev = 0
+                    ykalman_prev = 0
+                # elif lift_flag == -1:
+                #     print('start record')
+                #     temp_record.append([time0, temp_raw])
+                #     lift_flag = 0
+                #     record_flag = 1
                 else:
                     if record_flag == 1:
                         temp_record.append([time0, temp_raw])
-                    dr = (hp - dmax) / dmax
-                    xcur = (x_re - x_origin)*0.2 + xcur_prev
-                    indextip0_correct = 3*(indextip0[0] - re_size[0] / 2) * (x_re - x_origin) / (x_origin)
 
-                    ycur = 20*(indextip0[0] + indextip0_correct - yp)/re_size[0] + ycur_prev
+                    xcur = (x_re - x_origin)
+                    # indextip0_correct = 3*(indextip0[0] - re_size[0] / 2) * (x_re - x_origin) / (x_origin)
+                    ycur = 0.5 * 0.46 * (indextip0[0] - yp)
+                    x_mov = xcur - xcur_prev
+                    y_mov = ycur - ycur_prev
+                    direction.append([np.arctan2(y_mov, x_mov) * 180 / np.pi, math.sqrt(x_mov ** 2 + y_mov ** 2)])
+                    xcur_prev = xcur
+                    ycur_prev = ycur
+                    # ycur = 20*(indextip0[0] + indextip0_correct - yp)/re_size[0] + ycur_prev
                     f.predict()
                     f.update([[xcur], [ycur]])
+                    x_kalman_mov = f.x[0][0] - xkalman_prev
+                    y_kalman_mov = f.x[1][0] - ykalman_prev
+                    direction_kalman.append([np.arctan2(y_kalman_mov, x_kalman_mov) * 180 / np.pi,
+                                             math.sqrt(x_kalman_mov ** 2 + y_kalman_mov ** 2)])
+                    xkalman_prev = f.x[0][0]
+                    ykalman_prev = f.x[1][0]
+                    xcur = confine(f.x[0][0], -50, 50)
+                    ycur = confine(f.x[1][0], -50, 50)
 
-                    xcur = confine(f.x[0][0], 0, 10)
-                    ycur = confine(f.x[1][0], 0, 10)
-                    # x_tp = xcur
-                    # y_tp = ycur
-                    # xcur = confine(xcur, 0, 10)
-                    # ycur = confine(ycur, 0, 10)
             im1.set_array(temp0)
 
             fullar_prev = ar_full
@@ -873,8 +886,12 @@ if __name__ == '__main__':
             # print('Lift FLAG:{0}, slope_wp:{1:.3f},  slope_fp:{2:.3f}, delta:{3:.3f}, slope_ft_abs:{4:.3f}, slope_ft_center:{5:.3f}, slope_phb:{6:.3f}'
             #     .format(lift_flag, slope_wp, slope_fp, slope_wp-slope_fp, slope_ft_abs, slope_ft_center, slope_ft_phb))
             plt.pause(0.001)
-        with open('charB100.pkl', 'wb') as file:
+
+
+        with open(path + name + '/raw/' + name + '_' + fname + '_raw.pkl', 'wb') as file:
             pickle.dump(gesture_record, file)
+        with open(path + name + '/processed/' + name + '_' + fname + '_dir.pkl', 'wb') as file:
+            pickle.dump([gesture_raw, gesture_kalman], file)
     # except KeyboardInterrupt:
     #     with open(path + 'x_movement.pkl', 'wb') as file:
     #         pickle.dump(cimg, file)

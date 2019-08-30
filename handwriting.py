@@ -479,20 +479,6 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.ion()
 
-        # map = plt.figure()
-        # map_ax = map.add_subplot(111)
-        # #  Setting the axes properties
-        # # map_ax.set_xlim3d([0.0, 10.0])
-        # map_ax.set_xlim([-50.0, 50.0])
-        # map_ax.set_xlabel('x')
-        # # map_ax.set_ylim3d([0.0, 10.0])
-        # map_ax.set_ylim([-50.0, 50.0])
-        # map_ax.set_ylabel('y')
-        # # map_ax.set_zlim3d([10.0, 0.0])
-        # # map_ax.set_zlabel('z')
-        # hl, = map_ax.plot([0], [0], 'o',markersize=10)
-
-        # fgbg = cv.createBackgroundSubtractorMOG2(history=5, detectShadows=False)
         mask = np.array([[1] * 32 for _ in range(24)], np.uint8)
         cnt = 0
         mlen = 1
@@ -539,8 +525,9 @@ if __name__ == '__main__':
         #     [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
         # ctemps = []
         n_avg = 6
-        fname = 'charA50'
-        with open(path + fname+'.pkl', 'rb') as file:
+        name = 'yy'
+        fname = 'yy_charZ'
+        with open(path + name + '/raw/'+fname+'.pkl', 'rb') as file:
             ctemps_xv = pickle.load(file)
 
         gesture_raw = list()
@@ -829,7 +816,7 @@ if __name__ == '__main__':
             gesture_kalman.append(direction_kalman)
             # print(hist / np.sum(hist), avg)
             # print(hist_kalman / np.sum(hist_kalman), avg_kalman)
-        with open(path+fname+'_dir.pkl', 'wb') as file:
+        with open(path + name + '/processed/'+fname+'_dir.pkl', 'wb') as file:
             pickle.dump([gesture_raw, gesture_kalman], file)
         # except KeyboardInterrupt:
         #     with open(path + 'x_movement.pkl', 'wb') as file:
