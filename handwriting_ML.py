@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearc
 from sklearn.metrics import confusion_matrix
 
 user_set = ['ztx', 'yy']
-symbol_set = ['charA', 'charZ', 'check', 'charX']
+symbol_set = ['charA', 'charX', 'charZ', 'check']
 X_uset = []
 Y_uset = []
 n = 18
@@ -25,12 +25,17 @@ for user in user_set:
             continue
         with open(path + filename, 'rb') as file:
             [gesture_raw, gesture_kalman] = pickle.load(file)
-        gesture_set = gesture_kalman
-        # y_true = y_unique.index(result)
+        if len(gesture_kalman[-1][0]) > 2:
+            gesture_set = gesture_kalman[:-1] + gesture_kalman[-1]
+        else:
+            gesture_set = gesture_kalman
         for gesture in gesture_set:
-            gesture = np.array(gesture).transpose()
-            angle = gesture[0]
-            amplitude = gesture[1]
+            angle_raw = [item[0] for item in gesture]
+            amplitude = [item[1] for item in gesture]
+            angle = list()
+            for i, amp in enumerate(amplitude):
+                if amp > 0.2*np.mean(amplitude):
+                    angle.append(angle_raw[i])
             # print(max(amplitude), min(amplitude), np.mean(amplitude))
             amp_hist = [[] for _ in range(n)]
             angle_hist = [[] for _ in range(n)]
@@ -38,12 +43,15 @@ for user in user_set:
             angle_second = angle[int(len(angle) / 2):]
             hist_first, avgf = np.histogram(angle_first, n, range=(-180, 180), density=False)
             hist_second, avgs = np.histogram(angle_second, n, range=(-180, 180), density=False)
+            hist, avg = np.histogram(angle, n, range=(-180, 180), density=False)
             x_first = hist_first / np.sum(hist_first)
             x_second = hist_second/np.sum(hist_second)
+            x = hist / np.sum(hist)
             # angle_shift = int(20/(360/n))
             # for i in range(-angle_shift,angle_shift):
             # X.append(np.roll(x,i))
-            X.append(list(x_first)+list(x_second))
+            # X.append(list(x_first) + list(x_second))
+            X.append(x)
             Y.append(result)
             # manual calculate histogram
             # for i in range(n):
@@ -91,12 +99,12 @@ cfm_ratio = [list(item/np.sum(item)) for item in cfm]
 print('CF Maxtrix is {0}, and accuracy is {1:.3f}'.format(cfm_ratio, np.mean(np.diagonal(cfm_ratio))))
 
 clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
-clf_svm.fit(X_uset[1], Y_uset[1])
-print('Between user accuracy {}'.format(clf_svm.score(X_uset[0], Y_uset[0])))
-
 cv = StratifiedKFold(3, random_state=1, shuffle=True)
 scores = cross_val_score(clf_svm, X_total, Y_total, cv=cv)
 print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores, scores.mean(), scores.std() * 2))
+
+clf_svm.fit(X_uset[0], Y_uset[0])
+print('Between user accuracy {}'.format(clf_svm.score(X_uset[1], Y_uset[1])))
 
 # clf_rf = RandomForestClassifier(n_estimators=300, max_depth=3, random_state=0)
 # # clf_rf.fit(X, Y)
