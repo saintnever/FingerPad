@@ -525,9 +525,9 @@ if __name__ == '__main__':
         #     [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
         # ctemps = []
         n_avg = 6
-        name = 'yy'
-        fname = 'yy_charZ'
-        with open(path + name + '/raw/'+fname+'.pkl', 'rb') as file:
+        name = 'ztx'
+        fname = 'ztx_charS'
+        with open(path + name + '/raw/'+fname+'_raw.pkl', 'rb') as file:
             ctemps_xv = pickle.load(file)
 
         gesture_raw = list()

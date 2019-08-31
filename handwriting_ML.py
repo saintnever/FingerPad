@@ -9,8 +9,8 @@ from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearc
 
 from sklearn.metrics import confusion_matrix
 
-user_set = ['ztx']
-symbol_set = ['charA', 'charZ', 'charX', 'charS']
+user_set = ['ztx', 'yy']
+symbol_set = ['charA', 'charZ', 'check', 'charX']
 X_uset = []
 Y_uset = []
 n = 18
@@ -34,12 +34,16 @@ for user in user_set:
             # print(max(amplitude), min(amplitude), np.mean(amplitude))
             amp_hist = [[] for _ in range(n)]
             angle_hist = [[] for _ in range(n)]
-            hist, avg = np.histogram(angle, n, range=(-180, 180), density=False)
-            x = hist / np.sum(hist)
+            angle_first = angle[:int(len(angle) / 2)]
+            angle_second = angle[int(len(angle) / 2):]
+            hist_first, avgf = np.histogram(angle_first, n, range=(-180, 180), density=False)
+            hist_second, avgs = np.histogram(angle_second, n, range=(-180, 180), density=False)
+            x_first = hist_first / np.sum(hist_first)
+            x_second = hist_second/np.sum(hist_second)
             # angle_shift = int(20/(360/n))
             # for i in range(-angle_shift,angle_shift):
             # X.append(np.roll(x,i))
-            X.append(x)
+            X.append(list(x_first)+list(x_second))
             Y.append(result)
             # manual calculate histogram
             # for i in range(n):
@@ -87,7 +91,9 @@ cfm_ratio = [list(item/np.sum(item)) for item in cfm]
 print('CF Maxtrix is {0}, and accuracy is {1:.3f}'.format(cfm_ratio, np.mean(np.diagonal(cfm_ratio))))
 
 clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
-# clf_svm.fit(X,Y)
+clf_svm.fit(X_uset[1], Y_uset[1])
+print('Between user accuracy {}'.format(clf_svm.score(X_uset[0], Y_uset[0])))
+
 cv = StratifiedKFold(3, random_state=1, shuffle=True)
 scores = cross_val_score(clf_svm, X_total, Y_total, cv=cv)
 print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores, scores.mean(), scores.std() * 2))
@@ -98,7 +104,6 @@ print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores, scores.mean(), scores
 # print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_rf, scores_rf.mean(), scores_rf.std() * 2))
 
 clf_gb = GradientBoostingClassifier()
-# clf_gb.fit(X, Y)
 scores_gb = cross_val_score(clf_gb, X_total, Y_total, cv=cv)
 print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_gb, scores_gb.mean(), scores_gb.std() * 2))
 
