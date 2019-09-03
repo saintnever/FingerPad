@@ -454,7 +454,7 @@ def distance(point1, point2=None):
 
 q0 = queue.Queue()
 stop_event = threading.Event()
-data_reader0 = SerialReader(stop_event, q0, 'COM17')
+data_reader0 = SerialReader(stop_event, q0, 'COM16')
 data_reader0.start()
 # data_reader1 = SerialReader(stop_event, q1, 'COM18')
 # data_reader1.start()
@@ -470,12 +470,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
     try:
         fig, ([ax0, ax1], [ax2, ax3], [ax4, ax5]) = plt.subplots(3, 2)
-        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
-        im1 = ax1.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
-        im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
-        im3 = ax3.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
-        im4 = ax4.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
-        im5 = ax5.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
+        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=re_size), cmap='seismic')
+        im1 = ax1.imshow(np.random.uniform(low=0, high=255, size=re_size), cmap='seismic')
+        im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
+        im3 = ax3.imshow(np.random.uniform(low=0, high=255, size=re_size), cmap='seismic')
+        im4 = ax4.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
+        im5 = ax5.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
         plt.tight_layout()
         plt.ion()
 
@@ -589,9 +589,10 @@ if __name__ == '__main__':
                 col = 31 - i % 32
                 img0[int(row)][int(col)] = x
             img0[img0 < 80] = 0
+            img0 = img0.transpose()
             img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
 
-            img0 = cv.flip(img0, 0)
+            # img0 = cv.flip(img0, 0)
 
             blur0 = cv.GaussianBlur(img0, (31, 31), 0)
             ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
@@ -737,7 +738,7 @@ if __name__ == '__main__':
             wr = np.sum(th0.transpose()[0]) / len(th0)
             ar_full = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
 
-            th0[indextip0[1]:] = 0
+            # th0[indextip0[1]:] = 0
             # for i, item in enumerate(th0):
             #     th0[i][:center[1]] = 0
             # th0 = np.multiply(th0, mask)

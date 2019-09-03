@@ -470,12 +470,12 @@ if __name__ == '__main__':
         #                  # interpolation='lanczos')
         # im0 = ax0.imshow(np.random.uniform(low=22, high=32, size=(20, 36)), vmin=20, vmax=36, cmap='jet')
         #                  # interpolation='lanczos')
-        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
-        im1 = ax1.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
-        im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
-        im3 = ax3.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
-        im4 = ax4.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
-        im5 = ax5.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
+        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=re_size), cmap='seismic')
+        im1 = ax1.imshow(np.random.uniform(low=0, high=255, size=re_size), cmap='seismic')
+        im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
+        im3 = ax3.imshow(np.random.uniform(low=20, high=36, size=re_size), cmap='seismic')
+        im4 = ax4.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
+        im5 = ax5.imshow(np.random.uniform(low=0, high=1, size=re_size), cmap=plt.cm.gray)
         plt.tight_layout()
         plt.ion()
 
@@ -559,16 +559,17 @@ if __name__ == '__main__':
                 temp0 = np.average(np.array(q_temp), weights=range(1, mlen+1), axis=0)
             else:
                 temp0 = temp_raw
-            temp0 = colorscale(temp0, np.min(temp0), np.max(temp0))
+            # temp0 = colorscale(temp0, np.min(temp0), np.max(temp0))
             img0 = np.array([[0] * 32 for _ in range(24)], np.uint8)
             for i, x in enumerate(temp0):
                 row = i // 32
                 col = 31 - i % 32
                 img0[int(row)][int(col)] = x
-            img0[img0 < 130] = 0
+            # img0[img0 < 130] = 0
+            img0 = img0.transpose()
             img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
 
-            img0 = cv.flip(img0, 0)
+            # img0 = cv.flip(img0, 0)
 
             # blur, opening, and erode
             # kernelo = cv.getStructuringElement(cv.MORPH_ELLIPSE, (15, 15))
@@ -576,6 +577,7 @@ if __name__ == '__main__':
             # kerneld = cv.getStructuringElement(cv.MORPH_ELLIPSE, (11,11))
             # img0 = cv.erode(img0, kerneld)
             blur0 = cv.GaussianBlur(img0, (31, 31), 0)
+            im3.set_array(blur0)
             ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
 
             # h, w = blur0.shape[:2]
@@ -700,7 +702,7 @@ if __name__ == '__main__':
             wr = np.sum(th0.transpose()[0]) / len(th0)
             ar_full = np.sum(np.sum(th0)) / (len(th0) * len(th0.transpose())) * 1000
 
-            th0[indextip0[1]:] = 0
+            # th0[indextip0[1]:] = 0
             # for i, item in enumerate(th0):
             #     th0[i][:center[1]] = 0
             # th0 = np.multiply(th0, mask)
