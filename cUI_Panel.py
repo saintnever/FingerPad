@@ -86,6 +86,8 @@ class SerialReader(threading.Thread):
 class UI_panel():
     def __init__(self, com, rtplot):
         self.fsize = (24*10, 32*10)
+        self.fsize1 = (32*10, 24*10)
+        # self.fsize = self.fsize1
         self.flag_rtplot = rtplot
         self.com = com
         self.center = (0,0)
@@ -99,6 +101,12 @@ class UI_panel():
         self.handback = (0, 0)
         self.im = list()
         self.finger_slope = 0
+        self.finger_slope_prev = self.finger_slope
+        self.flag_lift = 0
+        self.lift_time = 0
+        self.down_time = 0
+        self.h_cal = 0
+        self.h = 0
 
     def initserial(self):
         self.reader = SerialReader(self.stop_event, self.tempq, self.com)
@@ -122,11 +130,13 @@ class UI_panel():
                 self.img[int(row)][int(col)] = x
             # resize, blur, and binarize image
             img = self.img
-            img[img < 0.5*256] = 0
+            # img[img < 0.3*256] = 0
+            # img = img.transpose()
+            img = cv.resize(img, self.fsize1, interpolation=cv.INTER_CUBIC)
             img = img.transpose()
-            img = cv.resize(img, self.fsize, interpolation=cv.INTER_CUBIC)
             blur = cv.GaussianBlur(img, (31, 31), 0)
-            ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            # ret, th = cv.threshold(blur, np.amax(blur) * 0.8, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            ret, th = cv.threshold(blur, np.amax(blur) * 0.7, 255, cv.THRESH_BINARY)
             # use the largest contour as the hand contour
             contours, hierarchy = cv.findContours(th, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
             areas = [cv.contourArea(c) for c in contours]
@@ -136,8 +146,6 @@ class UI_panel():
             cnt = contours[max_index]
             # use convext hull to find the fingertip and hand back location
             hull = cv.convexHull(cnt, returnPoints=False)
-            x, y, w, h = cv.boundingRect(cnt)
-            self.center = (int(x + w / 2), int(y + h / 2))
             xmax = 0
             ymin = 10000
             for i in range(len(hull)):
@@ -151,8 +159,38 @@ class UI_panel():
                     self.handback = tuple(cnt[hull[i]][0][0])
             # use the slope between handback and fingertip to determine whether the index finger is lifted
             self.finger_slope = (self.indextip[1] - self.handback[1]) / (self.indextip[0] - self.handback[0])
-            d = (60*217.6)/h
-            print('the fh slope is {0:.02f}, d is {1:.02f}'.format(self.finger_slope, d))
+            click = False
+            if self.finger_slope < 0.5:
+                if self.flag_lift == 0:
+                    if time.time() - self.lift_time < 1.5:
+                        click = True
+                self.lift_time = time.time()
+                self.flag_lift = 1
+                self.buttons_value = [0, 0, 0, 0]
+            elif self.finger_slope > 0.6:
+                if self.flag_lift == 1:
+                    self.flag_lift = 0
+                    if self.h_cal == 0:
+                        x, y, w, self.h_cal = cv.boundingRect(cnt)
+                    # self.center = (int(x + w / 2), int(y + h / 2))
+
+                x, y, w, self.h = cv.boundingRect(cnt)
+            if self.h_cal != 0:
+                d = self.h/self.h_cal
+                if click:
+                    print('Click!')
+                    if d > 0.8:
+                        if self.indextip[0] < 180:
+                            self.buttons_value[0] = 1
+                        else:
+                            self.buttons_value[1] = 1
+                    else:
+                        if self.indextip[0] < 180 - 30:
+                            self.buttons_value[3] = 1
+                        else:
+                            self.buttons_value[2] = 1
+                print('the fh slope is {0:.02f}, h is {1:.02f}, slider_value is {2:.02f}, lift_flag is {3}, button_values {4}'.
+                      format(self.finger_slope, self.h/self.h_cal, self.indextip[0], self.flag_lift, self.buttons_value))
             if self.flag_rtplot:
                 cv.circle(blur, self.indextip, 5, (127, 255, 255), -1)
                 cv.circle(blur, self.handback, 5, (127, 255, 255), -1)
@@ -162,10 +200,30 @@ class UI_panel():
                 self.im[2].set_array(th)
                 plt.pause(0.001)
 
-            
+    # def click_detection(self):
+    #     click = False
+    #     if self.finger_slope < 0.4:
+    #         if self.flag_lift == 0:
+    #             if self.h_cal == 0:
+    #                 x, y, w, h = cv.boundingRect(cnt)
+    #                 # self.center = (int(x + w / 2), int(y + h / 2))
+    #                 self.h = h
+    #             if time.time() - self.lift_time < 1.5:
+    #                 click = True
+    #         self.lift_time = time.time()
+    #         self.flag_lift = 1
+    #     elif self.finger_slope > 0.45:
+    #         if self.flag_lift == 1:
+    #             self.flag_lift = 0
+    #             # self.down_time = time.time()
+    #             # if self.down_time - self.lift_time < 1:
+    #             #     return True
+    #     return click
+
+
     def rtplot(self):
         fig, ([ax0, ax1], [ax2, ax3], [ax4, ax5]) = plt.subplots(3, 2)
-        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=self.fsize), cmap='seismic')
+        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=self.fsize1), cmap='seismic')
         im1 = ax1.imshow(np.random.uniform(low=0, high=255, size=self.fsize), cmap='seismic')
         im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=self.fsize), cmap=plt.cm.gray)
         im3 = ax3.imshow(np.random.uniform(low=0, high=255, size=self.fsize), cmap='seismic')
