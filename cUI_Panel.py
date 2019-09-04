@@ -99,14 +99,24 @@ class UI_panel():
         self.slides_value = [0, 0]
         self.indextip = (0, 0)
         self.handback = (0, 0)
+        self.wrist = (0, 0)
         self.im = list()
         self.finger_slope = 0
-        self.finger_slope_prev = self.finger_slope
+        self.wrist_slope = 0
+        self.slope = self.finger_slope - self.wrist_slope
+        self.slope_prev = self.slope
+        self.click_pos = 0
         self.flag_lift = 0
         self.lift_time = 0
         self.down_time = 0
-        self.h_cal = 0
+        self.h_cal = -1
         self.h = 0
+        self.slide = threading.Event()
+        self.click = threading.Event()
+        self.t_wait = 1.5
+        self.slider_n = 0
+        self.button_n = 0
+        self.d = 1
 
     def initserial(self):
         self.reader = SerialReader(self.stop_event, self.tempq, self.com)
@@ -137,7 +147,7 @@ class UI_panel():
             # img = img.transpose()
             blur = cv.GaussianBlur(img, (31, 31), 0)
             # ret, th = cv.threshold(blur, np.amax(blur) * 0.8, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-            ret, th = cv.threshold(blur, np.amax(blur) * 0.7, 255, cv.THRESH_BINARY)
+            ret, th = cv.threshold(blur, np.amax(blur) * 0.6, 255, cv.THRESH_BINARY)
             # use the largest contour as the hand contour
             contours, hierarchy = cv.findContours(th, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
             areas = [cv.contourArea(c) for c in contours]
@@ -149,7 +159,9 @@ class UI_panel():
             hull = cv.convexHull(cnt, returnPoints=False)
             xmax = 0
             ymin = 10000
+            xmin = 10000
             for i in range(len(hull)):
+                # cv.circle(blur, tuple(cnt[hull[i]][0][0]), 6, (127, 255, 255), -1)
                 # find is the hull point that has the largest x value (furthest from the wrist)
                 if cnt[hull[i]][0][0][0] > xmax:
                     xmax = cnt[hull[i]][0][0][0]
@@ -158,69 +170,80 @@ class UI_panel():
                 if cnt[hull[i]][0][0][1] < ymin:
                     ymin = cnt[hull[i]][0][0][1]
                     self.handback = tuple(cnt[hull[i]][0][0])
+                if cnt[hull[i]][0][0][0] < xmin:
+                    xmin = cnt[hull[i]][0][0][0]
+                    self.wrist = tuple(cnt[hull[i]][0][0])
             # use the slope between handback and fingertip to determine whether the index finger is lifted
             self.finger_slope = (self.indextip[1] - self.handback[1]) / (self.indextip[0] - self.handback[0])
-            click = False
-            if self.finger_slope < 0.5:
+            # self.wrist_slope = (self.wrist[1] - self.handback[1]) / (self.wrist[0] - self.handback[0])
+            # self.slope = self.finger_slope - self.wrist_slope
+            self.click.clear()
+            if self.finger_slope < 0.4:
                 if self.flag_lift == 0:
-                    if time.time() - self.lift_time < 1.5:
-                        click = True
+                    if time.time() - self.lift_time < self.t_wait:
+                        self.click.set()
                 self.lift_time = time.time()
                 self.flag_lift = 1
+                self.slide.clear()
+                self.slides_value = [0, 0]
                 self.buttons_value = [0, 0, 0, 0]
-            elif self.finger_slope > 0.6:
+            elif self.finger_slope > 0.5:
+                # only update d when the finger first put down
                 if self.flag_lift == 1:
                     self.flag_lift = 0
-                    if self.h_cal == 0:
-                        x, y, w, self.h_cal = cv.boundingRect(cnt)
-                    # self.center = (int(x + w / 2), int(y + h / 2))
-
-                x, y, w, self.h = cv.boundingRect(cnt)
-            if self.h_cal != 0:
-                d = self.h/self.h_cal
-                if click:
-                    print('Click!')
-                    if d > 0.8:
-                        if self.indextip[0] < 180:
-                            self.buttons_value[0] = 1
+                    self.click_pos = self.indextip[0]
+                    self.down_time = time.time()
+                    # self.h = self.pl_distance(self.wrist, self.indextip, self.handback)
+                    self.h = self.wrist[1] - self.handback[1]
+                    if self.h_cal == -1:
+                        # self.h_cal = self.pl_distance(self.wrist, self.indextip, self.handback)
+                        self.h_cal = self.wrist[1] - self.handback[1]
+                        self.finger_slope_cal = self.finger_slope
+                    self.d = self.h / self.h_cal
+                else:
+                    if time.time() - self.down_time > self.t_wait and abs(self.indextip[0] - self.click_pos) > 10:
+                        self.slide.set()
+                        if self.d > 0.8:
+                            self.slider_n = 0
                         else:
-                            self.buttons_value[1] = 1
+                            self.slider_n = 1
+                    # cv.boundingRect(cnt)
+            # determine the button clicked based on hand height ratio and fingertip location
+            self.slope_prev = self.slope
+            # if self.h_cal != 0:
+            #     self.d = self.h/self.h_cal
+            if self.click.is_set():
+                print('Click!')
+                if self.d > 0.8:
+                    if self.click_pos < 190:
+                        self.buttons_value[0] = 1
+                        self.button_n = 0
                     else:
-                        if self.indextip[0] < 180 - 30:
-                            self.buttons_value[3] = 1
-                        else:
-                            self.buttons_value[2] = 1
-                print('the fh slope is {0:.02f}, h is {1:.02f}, slider_value is {2:.02f}, lift_flag is {3}, button_values {4}'.
-                      format(self.finger_slope, self.h/self.h_cal, self.indextip[0], self.flag_lift, self.buttons_value))
+                        self.buttons_value[1] = 1
+                        self.button_n = 1
+                else:
+                    if self.click_pos < 190 - 20:
+                        self.buttons_value[3] = 1
+                        self.button_n = 3
+                    else:
+                        self.buttons_value[2] = 1
+                        self.button_n = 2
+            if self.slide.is_set():
+                print('Slide!')
+                self.slides_value[self.slider_n] = self.indextip[0] - self.click_pos
+                # self.slides_value[1] = self.indextip[0] - self.click_pos
+
+            print('the fh slope is {0:.02f}, h is {1:.02f}, slider_value is {2:.02f}, lift_flag is {3}, button_No {4}, slider values {5}'
+                  .format(self.finger_slope, self.h/self.h_cal, self.indextip[0], self.flag_lift, self.button_n, self.slides_value))
+
             if self.flag_rtplot:
                 cv.circle(blur, self.indextip, 5, (127, 255, 255), -1)
                 cv.circle(blur, self.handback, 5, (127, 255, 255), -1)
-                cv.circle(blur, self.center, 10, (127, 255, 255), -1)
+                cv.circle(blur, self.wrist, 5, (127, 255, 255), -1)
                 self.im[0].set_array(blur)
                 self.im[0].set_array(blur)
                 self.im[2].set_array(th)
                 plt.pause(0.001)
-
-    # def click_detection(self):
-    #     click = False
-    #     if self.finger_slope < 0.4:
-    #         if self.flag_lift == 0:
-    #             if self.h_cal == 0:
-    #                 x, y, w, h = cv.boundingRect(cnt)
-    #                 # self.center = (int(x + w / 2), int(y + h / 2))
-    #                 self.h = h
-    #             if time.time() - self.lift_time < 1.5:
-    #                 click = True
-    #         self.lift_time = time.time()
-    #         self.flag_lift = 1
-    #     elif self.finger_slope > 0.45:
-    #         if self.flag_lift == 1:
-    #             self.flag_lift = 0
-    #             # self.down_time = time.time()
-    #             # if self.down_time - self.lift_time < 1:
-    #             #     return True
-    #     return click
-
 
     def rtplot(self):
         fig, ([ax0, ax1], [ax2, ax3], [ax4, ax5]) = plt.subplots(3, 2)
@@ -267,12 +290,23 @@ class UI_panel():
         dY = pY - vY * length
         return int(cX), int(cY), int(dX), int(dY)
 
+    def pl_distance(self, p1, p2, p3):
+        p1 = np.array(p1)
+        p2 = np.array(p2)
+        p3 = np.array(p3)
+        return abs(np.cross(p2 - p1, p1 - p3) / np.linalg.norm(p2 - p1))
+
     def distance(self, point1, point2=None):
         if point2 is not None:
             return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
         else:
             return math.sqrt(point1[0] ** 2 + point1[1] ** 2)
 
+    def get_slider(self):
+        return self.slider_n, self.slides_value[self.slider_n]
+
+    def get_button(self):
+        return self.button_n
 
 if __name__ == '__main__':
     ui = UI_panel(com='COM16', rtplot=True)
