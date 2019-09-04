@@ -133,7 +133,8 @@ class UI_panel():
             # img[img < 0.3*256] = 0
             # img = img.transpose()
             img = cv.resize(img, self.fsize1, interpolation=cv.INTER_CUBIC)
-            img = img.transpose()
+            img = cv.flip(img, 0)
+            # img = img.transpose()
             blur = cv.GaussianBlur(img, (31, 31), 0)
             # ret, th = cv.threshold(blur, np.amax(blur) * 0.8, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
             ret, th = cv.threshold(blur, np.amax(blur) * 0.7, 255, cv.THRESH_BINARY)
@@ -223,7 +224,7 @@ class UI_panel():
 
     def rtplot(self):
         fig, ([ax0, ax1], [ax2, ax3], [ax4, ax5]) = plt.subplots(3, 2)
-        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=self.fsize1), cmap='seismic')
+        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=self.fsize), cmap='seismic')
         im1 = ax1.imshow(np.random.uniform(low=0, high=255, size=self.fsize), cmap='seismic')
         im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=self.fsize), cmap=plt.cm.gray)
         im3 = ax3.imshow(np.random.uniform(low=0, high=255, size=self.fsize), cmap='seismic')
