@@ -19,6 +19,8 @@ import pickle
 from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
 import argparse
+from scipy.spatial.distance import cdist, cosine
+from shape_context import ShapeContext
 
 
 class SerialReader(threading.Thread):
@@ -102,7 +104,12 @@ class symbol_detector():
         self.im = list()
         self.HuM_symbol = list()
         self.symbol_ims = dict()
-        self.init_HuM()
+        # self.init_HuM()
+        self.sc = None
+        self.base = list()
+        self.sym_names = list()
+        self.test = None
+        self.init_sc()
 
     def initserial(self):
         self.reader = SerialReader(self.stop_event, self.tempq, self.com)
@@ -131,27 +138,32 @@ class symbol_detector():
             img = cv.flip(img, 0)
             blur = cv.GaussianBlur(img, (31, 31), 0)
             ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            pointst = self.sc.get_points_from_img(th, 15)
+            self.test = self.sc.compute(pointst).flatten()
+            res_min = 10000
+            result = '0'
+            for i, base in enumerate(self.base):
+                # print(base.shape, descriptor.shape)
+                # res = cdist(np.array([base]), np.array([descriptort]), metric="cosine")
+                res = cdist(np.array([base]), np.array([self.test]))[0]
+                if res < res_min:
+                    res_min = res
+                    result = self.sym_names[i]
+            print(result)
+            # self.test = self.parse_img(th)
+            # self.match(self.base, self.test)
 
-            dmin = 10000
-            result = 'None'
-            d_HuMs = dict()
-            for sym, im in self.symbol_ims.items():
-                d_HuM = cv.matchShapes(th, im, cv.CONTOURS_MATCH_I3, 0)
-                d_HuMs[sym] = d_HuM
-                if d_HuM < dmin:
-                    dmin = d_HuM
-                    result = sym
-            print('{} '.format(d_HuMs))
-            print('recognized as {} with distance {}'.format(result, dmin))
-            # ret, th = cv.threshold(blur, np.amax(blur) * 0.6, 255, cv.THRESH_BINARY)
-            # use the largest contour as the hand contour
-            # contours, hierarchy = cv.findContours(th, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
-            # areas = [cv.contourArea(c) for c in contours]
-            # if len(areas) == 0:
-            #     continue
-            # max_index = np.argmax(areas)
-            # cnt = contours[max_index]
-            #
+            # dmin = 10000
+            # result = 'None'
+            # d_HuMs = dict()
+            # for sym, im in self.symbol_ims.items():
+            #     d_HuM = cv.matchShapes(th, im, cv.CONTOURS_MATCH_I3, 0)
+            #     d_HuMs[sym] = d_HuM
+            #     if d_HuM < dmin:
+            #         dmin = d_HuM
+            #         result = sym
+            # print('{} '.format(d_HuMs))
+            # print('recognized as {} with distance {}'.format(result, dmin))
 
             if self.flag_rtplot:
                 cv.circle(blur, self.indextip, 5, (127, 255, 255), -1)
@@ -181,6 +193,93 @@ class symbol_detector():
         for i in range(0, 7):
             re_huMoments.append(-np.sign(huMoments[i][0]) * np.log10(abs(huMoments[i][0])))
         return re_huMoments
+
+    def init_sc(self):
+        self.sc = ShapeContext()
+        filenames = [filename for filename in os.listdir('./heatlabel/') if filename.endswith('.jpg')]
+        kernel = np.ones((5, 5), np.uint8)
+
+        for n, filename in enumerate(filenames):
+            # plt.figure()
+            im = cv.imread('./heatlabel/'+filename, cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
+            # im = cv.bitwise_not(im)
+            im = cv.resize(im, self.fsize1, interpolation=cv.INTER_CUBIC)
+            blur = cv.GaussianBlur(im, (31, 31), 0)
+            ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+            # th = cv.dilate(th, kernel, iterations=1)
+            # plt.imshow(th)
+            points = self.sc.get_points_from_img(th, 15)
+            descriptor = self.sc.compute(points).flatten()
+            self.base.append(descriptor)
+            self.sym_names.append(filename.split('.')[0])
+        # plt.show()
+        # imt = cv.imread('./heatlabel/lock.jpg', cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
+        # # imt = cv.bitwise_not(imt)
+        # imt = cv.resize(imt, self.fsize1, interpolation=cv.INTER_CUBIC)
+        # blurt = cv.GaussianBlur(imt, (31, 31), 0)
+        # ret, tht = cv.threshold(blurt, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+        # # tht = cv.dilate(tht, kernel, iterations=1)
+        # # ret, tht = cv.threshold(blurt, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+        # pointst = self.sc.get_points_from_img(tht, 15)
+        # descriptort = self.sc.compute(pointst).flatten()
+        # for i, base in enumerate(self.base):
+        #     # print(base.shape, descriptor.shape)
+        #     # res = cdist(np.array([base]), np.array([descriptort]), metric="cosine")
+        #     res = cdist(np.array([base]), np.array([descriptort]))
+        #     print(self.sym_names[i], res)
+        # print(np.array(self.base).shape, np.array(self.test).shape)
+        # print(self.match(np.array(self.base), np.array(self.test)))
+
+    def get_contour_bounding_rectangles(self, gray):
+        """
+          Getting all 2nd level bouding boxes based on contour detection algorithm.
+        """
+        contours, hierarchy = cv.findContours(gray, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        res = []
+        for cnt in contours:
+            (x, y, w, h) = cv.boundingRect(cnt)
+            res.append((x, y, x + w, y + h))
+        return res
+
+    def parse_img(self, img):
+        # invert image colors
+        # img = cv.bitwise_not(img)
+        _, img = cv.threshold(img, 128, 255, cv.THRESH_BINARY)
+        # making numbers fat for better contour detectiion
+        # kernel = np.ones((2, 2), np.uint8)
+        # img = cv.dilate(img, kernel, iterations=1)
+
+        # getting our numbers one by one
+        rois = self.get_contour_bounding_rectangles(img)
+        # print(len(rois))
+        grayd = cv.cvtColor(img.copy(), cv.COLOR_GRAY2BGR)
+        nums = []
+        for r in rois:
+            grayd = cv.rectangle(grayd, (r[0], r[1]), (r[2], r[3]), (0, 255, 0), 1)
+            nums.append((r[0], r[1], r[2], r[3]))
+        # we are getting contours in different order so we need to sort them by x1
+        nums = sorted(nums, key=lambda x: x[0])
+        descs = []
+        for i, r in enumerate(nums):
+            if img[r[1]:r[3], r[0]:r[2]].mean() < 50:
+                continue
+            points = self.sc.get_points_from_img(img[r[1]:r[3], r[0]:r[2]], 15)
+            descriptor = self.sc.compute(points).flatten()
+            descs.append(descriptor)
+        # print(descs)
+        return descs
+
+
+    def match(self, base, current):
+        """
+          Here we are using cosine diff instead of "by paper" diff, cause it's faster
+        """
+        # res = cdist(base, current.reshape((1, current.shape[0])), metric="cosine")
+        res = cdist(base, current, metric="cosine")
+
+        idxmin = np.argmin(res.reshape(len(base)))
+        result = self.sym_names[idxmin]
+        return result
 
     def rtplot(self):
         fig, ([ax0, ax1], [ax2, ax3], [ax4, ax5]) = plt.subplots(3, 2)
