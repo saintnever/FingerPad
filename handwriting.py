@@ -470,8 +470,8 @@ if __name__ == '__main__':
         #                  # interpolation='lanczos')
         # im0 = ax0.imshow(np.random.uniform(low=22, high=32, size=(20, 36)), vmin=20, vmax=36, cmap='jet')
         #                  # interpolation='lanczos')
-        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
-        im1 = ax1.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
+        im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=re_size), cmap='seismic')
+        im1 = ax1.imshow(np.random.uniform(low=0, high=255, size=re_size), cmap='seismic')
         im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
         im3 = ax3.imshow(np.random.uniform(low=0, high=255, size=plot_size), cmap='seismic')
         im4 = ax4.imshow(np.random.uniform(low=0, high=1, size=plot_size), cmap=plt.cm.gray)
@@ -525,11 +525,11 @@ if __name__ == '__main__':
         #     [ret, mtx, dist, rvecs, tvecs] = pickle.load(file)
         # ctemps = []
         n_avg = 6
-        name = 'ztx'
-        fname = 'ztx_charS'
+        name = 'zsy'
+        fname = 'zsy_ques_3'
         with open(path + name + '/raw/'+fname+'_raw.pkl', 'rb') as file:
             ctemps_xv = pickle.load(file)
-
+        gesture_cnt = 0
         gesture_raw = list()
         gesture_kalman = list()
         for gesture in ctemps_xv:
@@ -574,8 +574,8 @@ if __name__ == '__main__':
                     row = i // 32
                     col = 31 - i % 32
                     img0[int(row)][int(col)] = x
-                img0[img0 < 80] = 0
-                img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
+                img0[img0 < 140] = 0
+                img0 = cv.resize(img0, plot_size, interpolation=cv.INTER_CUBIC)
 
                 img0 = cv.flip(img0, 0)
 
@@ -751,7 +751,8 @@ if __name__ == '__main__':
                 # if 10 < ph[0] and indextip0[0] < re_size[0] - 3:
                 # if True:
                 if enum == 1:
-                    print('PUT DOWN!')
+                    print('PUT DOWN! {}'.format(gesture_cnt))
+                    gesture_cnt += 1
                     hp = h
                     lift_flag = 0
                     yp = indextip0[0]
@@ -808,7 +809,7 @@ if __name__ == '__main__':
                 #       .format(lift_flag, dmax,  h, ycur, indextip0[0]+indextip0_correct, indextip0_correct, h_correction))
                 # print('Lift FLAG:{0}, slope_wp:{1:.3f},  slope_fp:{2:.3f}, delta:{3:.3f}, slope_ft_abs:{4:.3f}, slope_ft_center:{5:.3f}, slope_phb:{6:.3f}'
                 #     .format(lift_flag, slope_wp, slope_fp, slope_wp-slope_fp, slope_ft_abs, slope_ft_center, slope_ft_phb))
-                # plt.pause(0.001)
+                # plt.pause(0.08)
             # hist, avg = np.histogram(direction, 18)
             #
             # hist_kalman, avg_kalman = np.histogram(direction_kalman, 18)

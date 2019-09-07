@@ -9,8 +9,8 @@ from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearc
 
 from sklearn.metrics import confusion_matrix
 
-user_set = ['ztx', 'yy']
-symbol_set = ['charA', 'charX', 'charZ', 'check']
+user_set = ['cxy', 'ztx']
+symbol_set = ['back', 'cross', 'tick', 'ques', 'CA']
 X_uset = []
 Y_uset = []
 n = 18
@@ -103,8 +103,8 @@ cv = StratifiedKFold(3, random_state=1, shuffle=True)
 scores = cross_val_score(clf_svm, X_total, Y_total, cv=cv)
 print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores, scores.mean(), scores.std() * 2))
 
-clf_svm.fit(X_uset[0], Y_uset[0])
-print('Between user accuracy {}'.format(clf_svm.score(X_uset[1], Y_uset[1])))
+# clf_svm.fit(X_uset[0], Y_uset[0])
+# print('Between user accuracy {}'.format(clf_svm.score(X_uset[1], Y_uset[1])))
 
 # clf_rf = RandomForestClassifier(n_estimators=300, max_depth=3, random_state=0)
 # # clf_rf.fit(X, Y)

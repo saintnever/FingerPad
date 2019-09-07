@@ -588,11 +588,11 @@ if __name__ == '__main__':
                 row = i // 32
                 col = 31 - i % 32
                 img0[int(row)][int(col)] = x
-            img0[img0 < 80] = 0
-            img0 = img0.transpose()
-            img0 = cv.resize(img0, re_size, interpolation=cv.INTER_CUBIC)
+            img0[img0 < 160] = 0
+            # img0 = img0.transpose()
+            img0 = cv.resize(img0, plot_size, interpolation=cv.INTER_CUBIC)
 
-            # img0 = cv.flip(img0, 0)
+            img0 = cv.flip(img0, 0)
 
             blur0 = cv.GaussianBlur(img0, (31, 31), 0)
             ret, th0 = cv.threshold(blur0, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
@@ -755,7 +755,7 @@ if __name__ == '__main__':
             indextip0_correct = 0
 
             # if slope_wp - slope_fp > 1:
-            if slope_ft_abs < 0.5:
+            if slope_ft_abs < 0.4:
                 if lift_flag == 0:
                     print('LIFT, stop record')
                     if len(temp_record) > 0:
@@ -783,7 +783,7 @@ if __name__ == '__main__':
                     record_flag = 0
 
             # elif slope_wp-slope_fp < 0.6:
-            elif slope_ft_abs > 0.7:
+            elif slope_ft_abs > 0.5:
                 dmax = 1
                 for i in range(len(hull)):
                     ptmp = np.array(cnt[hull[i]][0][0])
