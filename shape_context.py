@@ -39,9 +39,13 @@ class ShapeContext(object):
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
         cnts,_ = cv2.findContours(image, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+        # areas = [cv2.contourArea(c) for c in cnts]
+        # max_index = np.argmax(areas)
+        # cnt = cnts[max_index]
         points = np.array(cnts[0]).reshape((-1, 2))
         if len(cnts) > 1:
-            points = np.concatenate([points, np.array(cnts[1][1]).reshape((-1, 2))], axis=0)
+        #     print('cnt > 1!')
+            points = np.concatenate([points, np.array(cnts[1]).reshape((-1, 2))], axis=0)
         points = list(points)
         # print(points)
         step = int(np.ceil(len(points) / simpleto))

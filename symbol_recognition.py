@@ -110,6 +110,7 @@ class symbol_detector():
         self.sym_names = list()
         self.test = None
         self.init_sc()
+        self.cnt = None
 
     def initserial(self):
         self.reader = SerialReader(self.stop_event, self.tempq, self.com)
@@ -138,18 +139,20 @@ class symbol_detector():
             img = cv.flip(img, 0)
             blur = cv.GaussianBlur(img, (31, 31), 0)
             ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-            pointst = self.sc.get_points_from_img(th, 15)
-            self.test = self.sc.compute(pointst).flatten()
-            res_min = 10000
-            result = '0'
-            for i, base in enumerate(self.base):
-                # print(base.shape, descriptor.shape)
-                # res = cdist(np.array([base]), np.array([descriptort]), metric="cosine")
-                res = cdist(np.array([base]), np.array([self.test]))[0]
-                if res < res_min:
-                    res_min = res
-                    result = self.sym_names[i]
-            print(result)
+            self.test = self.parse_img(th)
+            print(self.match(np.array(self.base), self.test))
+            # pointst = self.sc.get_points_from_img(th, 15)
+            # self.test = self.sc.compute(pointst).flatten()
+            # res_min = 10000
+            # result = '0'
+            # for i, base in enumerate(self.base):
+            #     # print(base.shape, descriptor.shape)
+            #     # res = cdist(np.array([base]), np.array([descriptort]), metric="cosine")
+            #     res = cdist(base, self.test)[0]
+            #     if res < res_min:
+            #         res_min = res
+            #         result = self.sym_names[i]
+            # print(result)
             # self.test = self.parse_img(th)
             # self.match(self.base, self.test)
 
@@ -166,11 +169,15 @@ class symbol_detector():
             # print('recognized as {} with distance {}'.format(result, dmin))
 
             if self.flag_rtplot:
-                cv.circle(blur, self.indextip, 5, (127, 255, 255), -1)
-                cv.circle(blur, self.handback, 5, (127, 255, 255), -1)
-                cv.circle(blur, self.wrist, 5, (127, 255, 255), -1)
+                # cv.circle(blur, self.indextip, 5, (127, 255, 255), -1)
+                # cv.circle(blur, self.handback, 5, (127, 255, 255), -1)
+                # cv.circle(blur, self.wrist, 5, (127, 255, 255), -1)
+                cv.drawContours(blur, [self.cnt], 0, color=(255, 255, 255))
+                (x, y, w, h) = cv.boundingRect(self.cnt)
+                cv.rectangle(blur, (x, y), (x+w, y+h), 255, 2)
+
                 self.im[0].set_array(blur)
-                self.im[0].set_array(blur)
+                self.im[1].set_array(blur)
                 self.im[2].set_array(th)
                 plt.pause(0.001)
 
@@ -208,16 +215,18 @@ class symbol_detector():
             ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
             # th = cv.dilate(th, kernel, iterations=1)
             # plt.imshow(th)
-            points = self.sc.get_points_from_img(th, 15)
-            descriptor = self.sc.compute(points).flatten()
-            self.base.append(descriptor)
+            self.base.append(self.parse_img(th))
+            # points = self.sc.get_points_from_img(th, 15)
+            # descriptor = self.sc.compute(points).flatten()
+            # self.base.append(descriptor)
             self.sym_names.append(filename.split('.')[0])
         # plt.show()
-        # imt = cv.imread('./heatlabel/lock.jpg', cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
+        # imt = cv.imread('./heatlabel/search.jpg', cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
         # # imt = cv.bitwise_not(imt)
         # imt = cv.resize(imt, self.fsize1, interpolation=cv.INTER_CUBIC)
         # blurt = cv.GaussianBlur(imt, (31, 31), 0)
         # ret, tht = cv.threshold(blurt, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+        # self.test = self.parse_img(tht)
         # # tht = cv.dilate(tht, kernel, iterations=1)
         # # ret, tht = cv.threshold(blurt, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
         # pointst = self.sc.get_points_from_img(tht, 15)
@@ -227,8 +236,8 @@ class symbol_detector():
         #     # res = cdist(np.array([base]), np.array([descriptort]), metric="cosine")
         #     res = cdist(np.array([base]), np.array([descriptort]))
         #     print(self.sym_names[i], res)
-        # print(np.array(self.base).shape, np.array(self.test).shape)
-        # print(self.match(np.array(self.base), np.array(self.test)))
+        # print(np.array(self.base).shape, self.test.shape)
+        # print(self.match(np.array(self.base), self.test))
 
     def get_contour_bounding_rectangles(self, gray):
         """
@@ -241,16 +250,32 @@ class symbol_detector():
             res.append((x, y, x + w, y + h))
         return res
 
+    def get_contour_bounding_rectangles_largest(self, gray):
+        """
+          Getting all 2nd level bouding boxes based on contour detection algorithm.
+        """
+        contours, hierarchy = cv.findContours(gray, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        areas = [cv.contourArea(c) for c in contours]
+        max_index = np.argmax(areas)
+        cnt = contours[max_index]
+        self.cnt = cnt
+        (x, y, w, h) = cv.boundingRect(cnt)
+        # res = []
+        # for cnt in contours:
+        #     (x, y, w, h) = cv.boundingRect(cnt)
+        #     res.append((x, y, x + w, y + h))
+        return [(x, y, x + w, y + h)]
+
     def parse_img(self, img):
         # invert image colors
         # img = cv.bitwise_not(img)
-        _, img = cv.threshold(img, 128, 255, cv.THRESH_BINARY)
+        # _, img = cv.threshold(img, 128, 255, cv.THRESH_BINARY)
         # making numbers fat for better contour detectiion
         # kernel = np.ones((2, 2), np.uint8)
         # img = cv.dilate(img, kernel, iterations=1)
 
         # getting our numbers one by one
-        rois = self.get_contour_bounding_rectangles(img)
+        rois = self.get_contour_bounding_rectangles_largest(img)
         # print(len(rois))
         grayd = cv.cvtColor(img.copy(), cv.COLOR_GRAY2BGR)
         nums = []
@@ -263,23 +288,23 @@ class symbol_detector():
         for i, r in enumerate(nums):
             if img[r[1]:r[3], r[0]:r[2]].mean() < 50:
                 continue
-            points = self.sc.get_points_from_img(img[r[1]:r[3], r[0]:r[2]], 15)
+            points = self.sc.get_points_from_img(img[r[1]:r[3], r[0]:r[2]], 20)
             descriptor = self.sc.compute(points).flatten()
             descs.append(descriptor)
         # print(descs)
-        return descs
+        return np.array(descs[0])
 
 
     def match(self, base, current):
         """
           Here we are using cosine diff instead of "by paper" diff, cause it's faster
         """
-        # res = cdist(base, current.reshape((1, current.shape[0])), metric="cosine")
-        res = cdist(base, current, metric="cosine")
+        res = cdist(base, current.reshape((1, current.shape[0])), metric="cosine")
+        # res = cdist(base, current, metric="cosine")
 
         idxmin = np.argmin(res.reshape(len(base)))
         result = self.sym_names[idxmin]
-        return result
+        return result, res.reshape(len(base))[idxmin]
 
     def rtplot(self):
         fig, ([ax0, ax1], [ax2, ax3], [ax4, ax5]) = plt.subplots(3, 2)
