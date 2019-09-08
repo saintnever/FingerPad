@@ -21,7 +21,7 @@ from filterpy.common import Q_discrete_white_noise
 import argparse
 from scipy.spatial.distance import cdist, cosine
 from shape_context import ShapeContext
-
+import msvcrt
 
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
@@ -111,6 +111,7 @@ class symbol_detector():
         self.test = None
         self.init_sc()
         self.cnt = None
+        self.img_cnt = 0
 
     def initserial(self):
         self.reader = SerialReader(self.stop_event, self.tempq, self.com)
@@ -143,6 +144,13 @@ class symbol_detector():
             th = cv.erode(th, kernel)
             self.test = self.parse_img(th)
             print(self.match(np.array(self.base), self.test))
+            if msvcrt.kbhit():
+                key = msvcrt.getch().decode()
+                # print(key)
+                if key is 'm':
+                    print('Image saved! {}'.format(key))
+                    cv.imwrite('./heatlabel/img'+str(self.img_cnt)+'.jpg', self.img)
+                    self.img_cnt += 1
             # pointst = self.sc.get_points_from_img(th, 15)
             # self.test = self.sc.compute(pointst).flatten()
             # res_min = 10000
