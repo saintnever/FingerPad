@@ -22,6 +22,8 @@ import pickle
 from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
 import argparse
+import msvcrt
+
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
         threading.Thread.__init__(self)
@@ -754,8 +756,17 @@ if __name__ == '__main__':
             #                                                                                                 ar, ar_full, wr))
             indextip0_correct = 0
 
+            if msvcrt.kbhit():
+                key = msvcrt.getch().decode()
+                # print(key)
+                if key is 'd':
+                    gesture_record = gesture_record.pop(-1)
+                    gesture_cnt -= 1
+                    print('Delete Last Gesture! Now at Gesture {}'.format(gesture_cnt))
+                    gesture_raw = gesture_raw.pop(-1)
+                    gesture_kalman = gesture_kalman.pop(-1)
             # if slope_wp - slope_fp > 1:
-            if slope_ft_abs < 0.4:
+            if slope_ft_abs < 0.3:
                 if lift_flag == 0:
                     print('LIFT, stop record')
                     if len(temp_record) > 0:
@@ -783,7 +794,7 @@ if __name__ == '__main__':
                     record_flag = 0
 
             # elif slope_wp-slope_fp < 0.6:
-            elif slope_ft_abs > 0.5:
+            elif slope_ft_abs > 0.4:
                 dmax = 1
                 for i in range(len(hull)):
                     ptmp = np.array(cnt[hull[i]][0][0])
@@ -798,6 +809,7 @@ if __name__ == '__main__':
                 x_re = (60*216.7) / dmax
                 y_fts.append(indextip0[0]-yp)
                 h_fts.append(h-hp)
+
 
                 # print(np.std(y_fts))
                 # dmax = finger_width

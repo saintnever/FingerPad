@@ -9,8 +9,9 @@ from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearc
 
 from sklearn.metrics import confusion_matrix
 
-user_set = ['cxy', 'txz']
-symbol_set = ['back', 'cross', 'tick', 'ques', 'CA', 'two']
+user_set = ['txz2']
+# symbol_set = ['back', 'cross', 'tick', 'ques', 'CA', 'two']
+symbol_set = ['ac', 'tv', 'l1', 'l2', 'k', 'p', 'back']
 X_uset = []
 Y_uset = []
 n = 18
@@ -21,7 +22,7 @@ for user in user_set:
     Y = list()
     for filename in filenames:
         result = filename.split('_')[1]
-        if result not in symbol_set:
+        if len(symbol_set) > 0 and result not in symbol_set:
             continue
         with open(path + filename, 'rb') as file:
             [gesture_raw, gesture_kalman] = pickle.load(file)
@@ -56,15 +57,18 @@ for user in user_set:
             amp_second = amp_filtered[int(len(amp_filtered) / 2):]
             for i, amp in enumerate(amp_filtered):
                 diff = angle_raw[i] - np.array(avg)
-                index = np.argmin(diff[diff>0])
+                diff[diff < 0] = 360
+                index = np.argmin(diff)
                 amp_hist[index] += amp
             for i, amp in enumerate(amp_first):
                 diff = angle_first[i] - np.array(avg)
-                index = np.argmin(diff[diff > 0])
+                diff[diff < 0] = 360
+                index = np.argmin(diff)
                 amp_first_hist[index] += amp
             for i, amp in enumerate(amp_second):
                 diff = angle_second[i] - np.array(avg)
-                index = np.argmin(diff[diff > 0])
+                diff[diff < 0] = 360
+                index = np.argmin(diff)
                 amp_second_hist[index] += amp
             amp_hist = amp_hist / np.sum(amp_hist)
             amp_first_hist = amp_first_hist / np.sum(amp_first_hist)
@@ -128,15 +132,15 @@ cv = StratifiedKFold(3, random_state=1, shuffle=True)
 scores = cross_val_score(clf_svm, X_total, Y_total, cv=cv)
 print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores, scores.mean(), scores.std() * 2))
 
-clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
-clf_svm.fit(X_uset[0], Y_uset[0])
-print('Between user accuracy {}'.format(clf_svm.score(X_uset[1], Y_uset[1])))
+# clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
+# clf_svm.fit(X_uset[0], Y_uset[0])
+# print('Between user accuracy {}'.format(clf_svm.score(X_uset[1], Y_uset[1])))
 
-# clf_rf = RandomForestClassifier(n_estimators=300, max_depth=3, random_state=0)
-# # clf_rf.fit(X, Y)
-# scores_rf = cross_val_score(clf_rf, X_total, Y_total, cv=cv)
-# print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_rf, scores_rf.mean(), scores_rf.std() * 2))
-
+clf_rf = RandomForestClassifier(n_estimators=600, max_depth=5, random_state=0)
+# clf_rf.fit(X, Y)
+scores_rf = cross_val_score(clf_rf, X_total, Y_total, cv=cv)
+print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_rf, scores_rf.mean(), scores_rf.std() * 2))
+#
 # clf_gb = GradientBoostingClassifier()
 # scores_gb = cross_val_score(clf_gb, X_total, Y_total, cv=cv)
 # print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_gb, scores_gb.mean(), scores_gb.std() * 2))

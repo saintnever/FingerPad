@@ -88,6 +88,7 @@ class symbol_detector():
     def __init__(self, com, rtplot):
         self.fsize = (24 * 10, 32 * 10)
         self.fsize1 = (32 * 10, 24 * 10)
+        self.hu_size = (20 * 10, 20 * 10)
         # self.fsize = self.fsize1
         self.flag_rtplot = rtplot
         self.com = com
@@ -102,16 +103,19 @@ class symbol_detector():
         self.handback = (0, 0)
         self.wrist = (0, 0)
         self.im = list()
+        self.mlen = 8
+        self.q_temp = deque(maxlen=self.mlen)
         self.HuM_symbol = list()
         self.symbol_ims = dict()
-        # self.init_HuM()
         self.sc = None
         self.base = list()
         self.sym_names = list()
         self.test = None
-        self.init_sc()
+        self.n_points = 15
         self.cnt = None
         self.img_cnt = 0
+        self.init_HuM()
+        # self.init_sc()
 
     def initserial(self):
         self.reader = SerialReader(self.stop_event, self.tempq, self.com)
@@ -127,7 +131,12 @@ class symbol_detector():
             self.rtplot()
         while not self.stop_event.is_set():
             time0, temp_raw = self.tempq.get()
-            temp_scale = self.colorscale(temp_raw, np.min(temp_raw), np.max(temp_raw))
+            self.q_temp.append(temp_raw)
+            if len(list(self.q_temp)) == self.mlen:
+                temp0 = np.average(np.array(self.q_temp), weights=range(1, self.mlen + 1), axis=0)
+            else:
+                temp0 = temp_raw
+            temp_scale = self.colorscale(temp0, np.min(temp0), np.max(temp0))
             # assemble image
             for i, x in enumerate(temp_scale):
                 row = i // 32
@@ -140,10 +149,10 @@ class symbol_detector():
             img = cv.flip(img, 0)
             blur = cv.GaussianBlur(img, (31, 31), 0)
             ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-            kernel = np.ones((5, 5), np.uint8)
-            th = cv.erode(th, kernel)
-            self.test = self.parse_img(th)
-            print(self.match(np.array(self.base), self.test))
+            # kernel = np.ones((5, 5), np.uint8)
+            # th = cv.erode(th, kernel)
+            # self.test = self.parse_img(th)
+            # print(self.match(np.array(self.base), self.test))
             if msvcrt.kbhit():
                 key = msvcrt.getch().decode()
                 # print(key)
@@ -166,54 +175,95 @@ class symbol_detector():
             # self.test = self.parse_img(th)
             # self.match(self.base, self.test)
 
-            # dmin = 10000
-            # result = 'None'
-            # d_HuMs = dict()
-            # for sym, im in self.symbol_ims.items():
-            #     d_HuM = cv.matchShapes(th, im, cv.CONTOURS_MATCH_I3, 0)
-            #     d_HuMs[sym] = d_HuM
-            #     if d_HuM < dmin:
-            #         dmin = d_HuM
-            #         result = sym
-            # print('{} '.format(d_HuMs))
-            # print('recognized as {} with distance {}'.format(result, dmin))
+            dmin = 10000
+            result = 'None'
+            d_HuMs = dict()
+            contours, hierarchy = cv.findContours(th, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+            areas = [cv.contourArea(c) for c in contours]
+            if len(areas) == 0:
+                continue
+            max_index = np.argmax(areas)
+            self.cnt = contours[max_index]
+            (x, y, w, h) = cv.boundingRect(self.cnt)
+            th_crop = cv.resize(th[y:y+h, x:x+w],  self.hu_size, interpolation=cv.INTER_CUBIC)
+            # # find contour again
+            # contours, hierarchy = cv.findContours(th_crop, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+            # areas = [cv.contourArea(c) for c in contours]
+            # if len(areas) == 0:
+            #     continue
+            # max_index = np.argmax(areas)
+            # approx = cv.approxPolyDP(contours[max_index], 0.01 * cv.arcLength(contours[max_index], True), True)
+            approx = contours[max_index]
+            for sym, im in self.symbol_ims.items():
+                d_HuM = cv.matchShapes(th_crop, im, cv.CONTOURS_MATCH_I2, 0)
+                d_HuMs[sym] = d_HuM
+                if d_HuM < dmin:
+                    dmin = d_HuM
+                    result = sym
+            print('{} '.format(d_HuMs))
+            print('recognized as {} with distance {}'.format(result, dmin))
 
             if self.flag_rtplot:
                 # cv.circle(blur, self.indextip, 5, (127, 255, 255), -1)
                 # cv.circle(blur, self.handback, 5, (127, 255, 255), -1)
                 # cv.circle(blur, self.wrist, 5, (127, 255, 255), -1)
                 cv.drawContours(blur, [self.cnt], 0, color=(255, 255, 255))
+                cv.drawContours(th_crop, [approx], 0, color=(255, 255, 255))
                 (x, y, w, h) = cv.boundingRect(self.cnt)
                 cv.rectangle(blur, (x, y), (x+w, y+h), 255, 2)
 
                 self.im[0].set_array(blur)
                 self.im[1].set_array(blur)
                 self.im[2].set_array(th)
+                self.im[4].set_array(th_crop)
+                self.im[4].set_array(th_crop)
                 plt.pause(0.001)
 
     def init_HuM(self):
-        filenames = [filename for filename in os.listdir('./heatlabel/') if filename.endswith('.jpg')]
+        filenames = [filename for filename in os.listdir('./heatlabel/') if filename.endswith('.jpg') and filename.startswith('img')]
         for filename in filenames:
             im = cv.imread('./heatlabel/'+filename, cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
             im = cv.resize(im, self.fsize1, interpolation=cv.INTER_CUBIC)
             im = cv.GaussianBlur(im, (31, 31), 0)
             _, im = cv.threshold(im, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-            self.symbol_ims[filename.split('.')[0]] = im
-            self.HuM_symbol.append(self.HuM(im))
+            contours, hierarchy = cv.findContours(im, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+            areas = [cv.contourArea(c) for c in contours]
+            if len(areas) == 0:
+                continue
+            max_index = np.argmax(areas)
+            self.cnt = contours[max_index]
+            (x, y, w, h) = cv.boundingRect(self.cnt)
+            th_crop = cv.resize(im[y:y + h, x:x + w],  self.hu_size, interpolation=cv.INTER_CUBIC)
+            # contours, hierarchy = cv.findContours(th_crop, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+            # areas = [cv.contourArea(c) for c in contours]
+            # if len(areas) == 0:
+            #     continue
+            # max_index = np.argmax(areas)
+            # approx = contours[max_index]
+            # approx = cv.approxPolyDP(contours[max_index], 0.01 * cv.arcLength(contours[max_index], True), True)
+            self.symbol_ims[filename.split('.')[0]] = th_crop
+            # self.HuM_symbol.append(self.HuM(im))
 
     def HuM(self, im):
+        # contours, hierarchy = cv.findContours(im, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        # areas = [cv.contourArea(c) for c in contours]
+        # max_index = np.argmax(areas)
+        # cnt = contours[max_index]
+        # self.cnt = cnt
+        # (x, y, w, h) = cv.boundingRect(cnt)
+        # im = cv.resize(im[x:x+w][y:y+h], self.fsize1, interpolation=cv.INTER_CUBIC)
         # Calculate Moments
         moment = cv.moments(im)
         # Calculate Hu Moments
         huMoments = cv.HuMoments(moment)
         re_huMoments = []
-        for i in range(0, 7):
+        for i in range(0, 6):
             re_huMoments.append(-np.sign(huMoments[i][0]) * np.log10(abs(huMoments[i][0])))
         return re_huMoments
 
     def init_sc(self):
         self.sc = ShapeContext()
-        filenames = [filename for filename in os.listdir('./heatlabel/') if filename.endswith('.jpg')]
+        filenames = [filename for filename in os.listdir('./heatlabel/') if filename.endswith('.jpg') and not filename.startswith('img')]
         kernel = np.ones((5, 5), np.uint8)
 
         for n, filename in enumerate(filenames):
@@ -298,7 +348,11 @@ class symbol_detector():
         for i, r in enumerate(nums):
             if img[r[1]:r[3], r[0]:r[2]].mean() < 50:
                 continue
-            points = self.sc.get_points_from_img(img[r[1]:r[3], r[0]:r[2]], 20)
+            im = cv.resize(img[r[1]:r[3], r[0]:r[2]], self.fsize1, interpolation=cv.INTER_CUBIC)
+            # blur = cv.GaussianBlur(im, (31, 31), 0)
+            # ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            # points = self.sc.get_points_from_img(img[r[1]:r[3], r[0]:r[2]], 20)
+            points = self.sc.get_points_from_img(im, self.n_points)
             descriptor = self.sc.compute(points).flatten()
             descs.append(descriptor)
         # print(descs)
@@ -322,7 +376,7 @@ class symbol_detector():
         im1 = ax1.imshow(np.random.uniform(low=0, high=255, size=self.fsize), cmap='seismic')
         im2 = ax2.imshow(np.random.uniform(low=0, high=1, size=self.fsize), cmap=plt.cm.gray)
         im3 = ax3.imshow(np.random.uniform(low=0, high=255, size=self.fsize), cmap='seismic')
-        im4 = ax4.imshow(np.random.uniform(low=0, high=1, size=self.fsize), cmap=plt.cm.gray)
+        im4 = ax4.imshow(np.random.uniform(low=0, high=1, size=self.hu_size), cmap=plt.cm.gray)
         im5 = ax5.imshow(np.random.uniform(low=0, high=1, size=self.fsize), cmap=plt.cm.gray)
         self.im = [im0, im1, im2, im3, im4, im5]
         plt.tight_layout()
