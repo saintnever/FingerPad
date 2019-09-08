@@ -9,8 +9,8 @@ from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearc
 
 from sklearn.metrics import confusion_matrix
 
-user_set = ['cxy', 'ztx']
-symbol_set = ['back', 'cross', 'tick', 'ques', 'CA']
+user_set = ['cxy', 'txz']
+symbol_set = ['back', 'cross', 'tick', 'ques', 'CA', 'two']
 X_uset = []
 Y_uset = []
 n = 18
@@ -33,11 +33,13 @@ for user in user_set:
             angle_raw = [item[0] for item in gesture]
             amplitude = [item[1] for item in gesture]
             angle = list()
+            amp_filtered = list()
             for i, amp in enumerate(amplitude):
-                if amp > 0.2*np.mean(amplitude):
+                if amp > 0.1*np.mean(amplitude):
                     angle.append(angle_raw[i])
+                    amp_filtered.append(amp)
             # print(max(amplitude), min(amplitude), np.mean(amplitude))
-            amp_hist = [[] for _ in range(n)]
+            # amp_hist = [[] for _ in range(n)]
             angle_hist = [[] for _ in range(n)]
             angle_first = angle[:int(len(angle) / 2)]
             angle_second = angle[int(len(angle) / 2):]
@@ -47,11 +49,33 @@ for user in user_set:
             x_first = hist_first / np.sum(hist_first)
             x_second = hist_second/np.sum(hist_second)
             x = hist / np.sum(hist)
+            amp_hist = [0 for _ in hist]
+            amp_second_hist = [0 for _ in hist]
+            amp_first_hist = [0 for _ in hist]
+            amp_first = amp_filtered[:int(len(amp_filtered) / 2)]
+            amp_second = amp_filtered[int(len(amp_filtered) / 2):]
+            for i, amp in enumerate(amp_filtered):
+                diff = angle_raw[i] - np.array(avg)
+                index = np.argmin(diff[diff>0])
+                amp_hist[index] += amp
+            for i, amp in enumerate(amp_first):
+                diff = angle_first[i] - np.array(avg)
+                index = np.argmin(diff[diff > 0])
+                amp_first_hist[index] += amp
+            for i, amp in enumerate(amp_second):
+                diff = angle_second[i] - np.array(avg)
+                index = np.argmin(diff[diff > 0])
+                amp_second_hist[index] += amp
+            amp_hist = amp_hist / np.sum(amp_hist)
+            amp_first_hist = amp_first_hist / np.sum(amp_first_hist)
+            amp_second_hist = amp_second_hist / np.sum(amp_second_hist)
             # angle_shift = int(20/(360/n))
             # for i in range(-angle_shift,angle_shift):
             # X.append(np.roll(x,i))
+            # X.append(list(x_first) + list(x_second) + list(amp_hist))
+            X.append(list(x_first) + list(x_second) + list(amp_first_hist) + list(amp_second_hist))
             # X.append(list(x_first) + list(x_second))
-            X.append(x)
+            # X.append(x + list(amp_hist))
             Y.append(result)
             # manual calculate histogram
             # for i in range(n):
@@ -80,6 +104,7 @@ for user in user_set:
     X_uset.append(X)
     Y_uset.append(Y)
 
+# Overall-test
 X_total = list()
 Y_total = list()
 for i in range(len(X_uset)):
@@ -103,17 +128,20 @@ cv = StratifiedKFold(3, random_state=1, shuffle=True)
 scores = cross_val_score(clf_svm, X_total, Y_total, cv=cv)
 print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores, scores.mean(), scores.std() * 2))
 
-# clf_svm.fit(X_uset[0], Y_uset[0])
-# print('Between user accuracy {}'.format(clf_svm.score(X_uset[1], Y_uset[1])))
+clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
+clf_svm.fit(X_uset[0], Y_uset[0])
+print('Between user accuracy {}'.format(clf_svm.score(X_uset[1], Y_uset[1])))
 
 # clf_rf = RandomForestClassifier(n_estimators=300, max_depth=3, random_state=0)
 # # clf_rf.fit(X, Y)
-# scores_rf = cross_val_score(clf_rf, X, Y, cv=cv)
+# scores_rf = cross_val_score(clf_rf, X_total, Y_total, cv=cv)
 # print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_rf, scores_rf.mean(), scores_rf.std() * 2))
 
-clf_gb = GradientBoostingClassifier()
-scores_gb = cross_val_score(clf_gb, X_total, Y_total, cv=cv)
-print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_gb, scores_gb.mean(), scores_gb.std() * 2))
+# clf_gb = GradientBoostingClassifier()
+# scores_gb = cross_val_score(clf_gb, X_total, Y_total, cv=cv)
+# print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_gb, scores_gb.mean(), scores_gb.std() * 2))
+
+
 
 #
 # # print("Accuracy: %0.2f (+/- %0.2f)" % (scores_gb.mean(), scores_gb.std() * 2))

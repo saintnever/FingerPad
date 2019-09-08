@@ -134,11 +134,13 @@ class symbol_detector():
                 self.img[int(row)][int(col)] = x
             # resize, blur, and binarize image
             img = self.img
-            # img[img < 0.3*256] = 0
+            img[img < 0.5*256] = 0
             img = cv.resize(img, self.fsize1, interpolation=cv.INTER_CUBIC)
             img = cv.flip(img, 0)
             blur = cv.GaussianBlur(img, (31, 31), 0)
             ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            kernel = np.ones((5, 5), np.uint8)
+            th = cv.erode(th, kernel)
             self.test = self.parse_img(th)
             print(self.match(np.array(self.base), self.test))
             # pointst = self.sc.get_points_from_img(th, 15)
