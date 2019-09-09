@@ -169,6 +169,7 @@ class symbol_detector():
             # print(result)
             # self.test = self.parse_img(th)
             # self.match(self.base, self.test)
+
             dmin = 10000
             result = 'None'
             d_HuMs = dict()
@@ -188,34 +189,35 @@ class symbol_detector():
             # max_index = np.argmax(areas)
             # approx = cv.approxPolyDP(contours[max_index], 0.01 * cv.arcLength(contours[max_index], True), True)
             approx = contours[max_index]
-            # if msvcrt.kbhit():
-            #     key = msvcrt.getch().decode()
-            #     name = 'none'
-            #     if key is '1':
-            #         name = 'play'
-            #     elif key is '2':
-            #         name = 'stop'
-            #     elif key is '3':
-            #         name = 'qus'
-            #     elif key is '4':
-            #         name = 'search'
-            #     elif key is '5':
-            #         name = 'lock'
-            #     elif key is '6':
-            #         name = 'light'
-            #     # if key is 'm':
-            #     print('{} image saved!'.format(name))
-            #     cv.imwrite('./heatlabel/' + name + '_' + str(self.img_cnt) + '.jpg', self.img)
-            #     self.img_cnt += 1
-            for sym, im in self.symbol_ims.items():
-                # th_crop = cv.resize(th[y:y + h, x:x + w], im.shape, interpolation=cv.INTER_CUBIC)
-                d_HuM = cv.matchShapes(th_crop, im, cv.CONTOURS_MATCH_I2, 0)
-                d_HuMs[sym] = d_HuM
-                if d_HuM < dmin:
-                    dmin = d_HuM
-                    result = sym
-            print('{} '.format(d_HuMs))
-            print('recognized as {} with distance {}'.format(result, dmin))
+            if msvcrt.kbhit():
+                key = msvcrt.getch().decode()
+                name = 'none'
+                if key is '1':
+                    name = 'play'
+                elif key is '2':
+                    name = 'stop'
+                elif key is '3':
+                    name = 'qus'
+                elif key is '4':
+                    name = 'search'
+                elif key is '5':
+                    name = 'lock'
+                elif key is '6':
+                    name = 'light'
+                # if key is 'm':
+                print('{} image saved!'.format(name))
+                cv.imwrite('./heatlabel/' + name + '_' + str(self.img_cnt) + '.jpg', self.img)
+                self.img_cnt += 1
+            # for sym, im in self.symbol_ims.items():
+            #     # th_crop = cv.resize(th[y:y + h, x:x + w], im.shape, interpolation=cv.INTER_CUBIC)
+            #     d_HuM = cv.matchShapes(th_crop, im, cv.CONTOURS_MATCH_I2, 0)
+            #     d_HuMs[sym] = d_HuM
+            #     self.dist[sym] += d_HuM
+            #     if d_HuM < dmin:
+            #         dmin = d_HuM
+            #         result = sym
+            # print('{} '.format(d_HuMs))
+            # print('recognized as {} with distance {}'.format(result, dmin))
 
             if self.flag_rtplot:
                 # cv.circle(blur, self.indextip, 5, (127, 255, 255), -1)
@@ -237,7 +239,7 @@ class symbol_detector():
         filenames = [filename for filename in os.listdir('./heatlabel/') if filename.endswith('.jpg') and filename.startswith('img')]
 
         for filename in filenames:
-            im = cv.imread('./heatlabel/' + filename, cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
+            im = cv.imread('./heatlabel/'+filename, cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
             im = cv.resize(im, self.fsize1, interpolation=cv.INTER_CUBIC)
             im = cv.GaussianBlur(im, (31, 31), 0)
             _, im = cv.threshold(im, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
@@ -248,7 +250,7 @@ class symbol_detector():
             max_index = np.argmax(areas)
             self.cnt = contours[max_index]
             (x, y, w, h) = cv.boundingRect(self.cnt)
-            th_crop = cv.resize(im[y:y + h, x:x + w], self.hu_size, interpolation=cv.INTER_CUBIC)
+            th_crop = cv.resize(im[y:y + h, x:x + w],  self.hu_size, interpolation=cv.INTER_CUBIC)
             # contours, hierarchy = cv.findContours(th_crop, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
             # areas = [cv.contourArea(c) for c in contours]
             # if len(areas) == 0:
@@ -259,30 +261,6 @@ class symbol_detector():
             self.symbol_ims[filename.split('.')[0]] = th_crop
             self.HuM_symbol[filename.split('.')[0]] = self.HuM(th_crop)
             # self.HuM_symbol.append(self.HuM(im))
-
-        # for filename in filenames:
-        #     im = cv.imread('./heatlabel/'+filename, cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
-        #     im = cv.resize(im, self.fsize1, interpolation=cv.INTER_CUBIC)
-        #     im = cv.GaussianBlur(im, (31, 31), 0)
-        #     _, im = cv.threshold(im, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-        #     contours, hierarchy = cv.findContours(im, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        #     areas = [cv.contourArea(c) for c in contours]
-        #     if len(areas) == 0:
-        #         continue
-        #     max_index = np.argmax(areas)
-        #     self.cnt = contours[max_index]
-        #     (x, y, w, h) = cv.boundingRect(self.cnt)
-        #     th_crop = cv.resize(im[y:y + h, x:x + w],  self.hu_size, interpolation=cv.INTER_CUBIC)
-        #     # contours, hierarchy = cv.findContours(th_crop, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        #     # areas = [cv.contourArea(c) for c in contours]
-        #     # if len(areas) == 0:
-        #     #     continue
-        #     # max_index = np.argmax(areas)
-        #     # approx = contours[max_index]
-        #     # approx = cv.approxPolyDP(contours[max_index], 0.01 * cv.arcLength(contours[max_index], True), True)
-        #     self.symbol_ims[filename.split('.')[0]] = th_crop
-        #     self.HuM_symbol[filename.split('.')[0]] = self.HuM(th_crop)
-        #     # self.HuM_symbol.append(self.HuM(im))
 
     def HuM(self, im):
         # contours, hierarchy = cv.findContours(im, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
