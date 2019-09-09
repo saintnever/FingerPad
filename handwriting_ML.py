@@ -9,9 +9,9 @@ from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearc
 
 from sklearn.metrics import confusion_matrix
 
-user_set = ['txz2']
+user_set = ['txz2', 'zx2']
 # symbol_set = ['back', 'cross', 'tick', 'ques', 'CA', 'two']
-symbol_set = ['ac', 'tv', 'l1', 'l2', 'k', 'p', 'back']
+symbol_set = ['a', 't', 'l1', 'l2', 'k', 'p']
 X_uset = []
 Y_uset = []
 n = 18
@@ -116,7 +116,7 @@ for i in range(len(X_uset)):
         X_total.append(X_uset[i][j])
         Y_total.append(Y_uset[i][j])
 
-X_train, X_test, Y_train, Y_test = train_test_split(X_total, Y_total, test_size=0.33, random_state=4)
+X_train, X_test, Y_train, Y_test = train_test_split(X_total, Y_total, test_size=0.2, random_state=4)
 parameters = {'kernel':('linear', 'rbf', 'poly'), 'C':[1, 10]}
 svc = svm.SVC(gamma="scale")
 clf = GridSearchCV(svc, parameters, cv=3)
@@ -132,9 +132,9 @@ cv = StratifiedKFold(3, random_state=1, shuffle=True)
 scores = cross_val_score(clf_svm, X_total, Y_total, cv=cv)
 print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores, scores.mean(), scores.std() * 2))
 
-# clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
-# clf_svm.fit(X_uset[0], Y_uset[0])
-# print('Between user accuracy {}'.format(clf_svm.score(X_uset[1], Y_uset[1])))
+clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
+clf_svm.fit(X_uset[0], Y_uset[0])
+print('Between user accuracy {}'.format(clf_svm.score(X_uset[1], Y_uset[1])))
 
 clf_rf = RandomForestClassifier(n_estimators=600, max_depth=5, random_state=0)
 # clf_rf.fit(X, Y)

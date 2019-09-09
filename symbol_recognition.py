@@ -22,6 +22,7 @@ import argparse
 from scipy.spatial.distance import cdist, cosine
 from shape_context import ShapeContext
 import msvcrt
+from collections import defaultdict
 
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
@@ -105,8 +106,8 @@ class symbol_detector():
         self.im = list()
         self.mlen = 8
         self.q_temp = deque(maxlen=self.mlen)
-        self.HuM_symbol = dict()
-        self.symbol_ims = dict()
+        self.HuM_symbol = defaultdict(list)
+        self.symbol_ims = defaultdict(list)
         self.sc = None
         self.base = list()
         self.sym_names = list()
@@ -114,6 +115,7 @@ class symbol_detector():
         self.n_points = 15
         self.cnt = None
         self.img_cnt = 0
+        self.d_HuMs = defaultdict(list)
         self.HuM_save = dict()
         self.init_HuM()
         # self.init_sc()
@@ -150,6 +152,8 @@ class symbol_detector():
             img = cv.flip(img, 0)
             blur = cv.GaussianBlur(img, (31, 31), 0)
             ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            kernel = np.ones((3, 3), np.uint8)
+            th = cv.erode(th, kernel)
             # kernel = np.ones((5, 5), np.uint8)
             # th = cv.erode(th, kernel)
             # self.test = self.parse_img(th)
@@ -171,7 +175,6 @@ class symbol_detector():
             # self.match(self.base, self.test)
             dmin = 10000
             result = 'None'
-            d_HuMs = dict()
             contours, hierarchy = cv.findContours(th, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
             areas = [cv.contourArea(c) for c in contours]
             if len(areas) == 0:
@@ -209,12 +212,19 @@ class symbol_detector():
             #     self.img_cnt += 1
             for sym, im in self.symbol_ims.items():
                 # th_crop = cv.resize(th[y:y + h, x:x + w], im.shape, interpolation=cv.INTER_CUBIC)
-                d_HuM = cv.matchShapes(th_crop, im, cv.CONTOURS_MATCH_I2, 0)
-                d_HuMs[sym] = d_HuM
-                if d_HuM < dmin:
-                    dmin = d_HuM
-                    result = sym
-            print('{} '.format(d_HuMs))
+                d_hums = list()
+                for item in im:
+                    d_hums.append(cv.matchShapes(th_crop, item, cv.CONTOURS_MATCH_I2, 0))
+                d_HuM = np.mean(d_hums)
+                self.d_HuMs[sym].append(d_HuM)
+
+                if len(self.d_HuMs[sym]) > 10:
+                    self.d_HuMs[sym].pop(0)
+                    dist_avg = np.mean(self.d_HuMs[sym])
+                    if dist_avg < dmin:
+                        dmin = dist_avg
+                        result = sym
+            # print('{} '.format(d_HuMs))
             print('recognized as {} with distance {}'.format(result, dmin))
 
             if self.flag_rtplot:
@@ -234,13 +244,15 @@ class symbol_detector():
                 plt.pause(0.001)
 
     def init_HuM(self):
-        filenames = [filename for filename in os.listdir('./heatlabel/') if filename.endswith('.jpg') and filename.startswith('img')]
+        filenames = [filename for filename in os.listdir('./heatlabel/') if filename.endswith('.jpg')]
 
         for filename in filenames:
             im = cv.imread('./heatlabel/' + filename, cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
             im = cv.resize(im, self.fsize1, interpolation=cv.INTER_CUBIC)
             im = cv.GaussianBlur(im, (31, 31), 0)
             _, im = cv.threshold(im, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            kernel = np.ones((3, 3), np.uint8)
+            im = cv.erode(im, kernel)
             contours, hierarchy = cv.findContours(im, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
             areas = [cv.contourArea(c) for c in contours]
             if len(areas) == 0:
@@ -249,15 +261,8 @@ class symbol_detector():
             self.cnt = contours[max_index]
             (x, y, w, h) = cv.boundingRect(self.cnt)
             th_crop = cv.resize(im[y:y + h, x:x + w], self.hu_size, interpolation=cv.INTER_CUBIC)
-            # contours, hierarchy = cv.findContours(th_crop, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-            # areas = [cv.contourArea(c) for c in contours]
-            # if len(areas) == 0:
-            #     continue
-            # max_index = np.argmax(areas)
-            # approx = contours[max_index]
-            # approx = cv.approxPolyDP(contours[max_index], 0.01 * cv.arcLength(contours[max_index], True), True)
-            self.symbol_ims[filename.split('.')[0]] = th_crop
-            self.HuM_symbol[filename.split('.')[0]] = self.HuM(th_crop)
+            self.symbol_ims[filename.split('_')[0]].append(th_crop)
+            self.HuM_symbol[filename.split('_')[0]].append(self.HuM(th_crop))
             # self.HuM_symbol.append(self.HuM(im))
 
         # for filename in filenames:
