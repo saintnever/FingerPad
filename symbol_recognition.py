@@ -23,6 +23,10 @@ from scipy.spatial.distance import cdist, cosine
 from shape_context import ShapeContext
 import msvcrt
 from collections import defaultdict
+from sklearn import svm
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
 
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
@@ -104,7 +108,7 @@ class symbol_detector():
         self.handback = (0, 0)
         self.wrist = (0, 0)
         self.im = list()
-        self.mlen = 8
+        self.mlen = 3
         self.q_temp = deque(maxlen=self.mlen)
         self.HuM_symbol = defaultdict(list)
         self.symbol_ims = defaultdict(list)
@@ -117,6 +121,8 @@ class symbol_detector():
         self.img_cnt = 0
         self.d_HuMs = defaultdict(list)
         self.HuM_save = dict()
+        self.clf_svm = None
+        self.clf_rf = None
         self.init_HuM()
         # self.init_sc()
 
@@ -225,7 +231,10 @@ class symbol_detector():
                         dmin = dist_avg
                         result = sym
             # print('{} '.format(d_HuMs))
-            print('recognized as {} with distance {}'.format(result, dmin))
+            print('recognized as {} with distance {}, svm {}, rf{}'
+                  .format(result, dmin, self.clf_svm.predict(self.HuM(th_crop).reshape(1, -1)),
+                          self.clf_rf.predict(self.HuM(th_crop).reshape(1, -1))))
+
 
             if self.flag_rtplot:
                 # cv.circle(blur, self.indextip, 5, (127, 255, 255), -1)
@@ -245,9 +254,8 @@ class symbol_detector():
 
     def init_HuM(self):
         filenames = [filename for filename in os.listdir('./heatlabel/') if filename.endswith('.jpg')]
-
         for filename in filenames:
-            im = cv.imread('./heatlabel/' + filename, cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
+            im = cv.imread('./heatlabel/' + filename, cv.IMREAD_GRAYSCALE)
             im = cv.resize(im, self.fsize1, interpolation=cv.INTER_CUBIC)
             im = cv.GaussianBlur(im, (31, 31), 0)
             _, im = cv.threshold(im, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
@@ -264,6 +272,23 @@ class symbol_detector():
             self.symbol_ims[filename.split('_')[0]].append(th_crop)
             self.HuM_symbol[filename.split('_')[0]].append(self.HuM(th_crop))
             # self.HuM_symbol.append(self.HuM(im))
+
+        # create a ML model
+        X_train = list()
+        Y_train = list()
+        for k, v in self.HuM_symbol.items():
+            for hv in v:
+                # print(hv)
+                X_train.append(hv)
+                Y_train.append(k)
+        svc = svm.SVC(gamma="scale")
+        parameters = {'kernel': ('linear', 'rbf', 'poly'), 'C': [1, 10]}
+        cv_ml = StratifiedKFold(3, random_state=1, shuffle=True)
+        self.clf_svm = GridSearchCV(svc, parameters, cv=cv_ml)
+        self.clf_svm.fit(X_train, Y_train)
+
+        self.clf_rf = RandomForestClassifier(n_estimators=600, max_depth=5, random_state=0)
+        self.clf_rf.fit(X_train, Y_train)
 
         # for filename in filenames:
         #     im = cv.imread('./heatlabel/'+filename, cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
@@ -304,7 +329,7 @@ class symbol_detector():
         re_huMoments = []
         for i in range(0, 6):
             re_huMoments.append(-np.sign(huMoments[i][0]) * np.log10(abs(huMoments[i][0])))
-        return re_huMoments
+        return np.array(re_huMoments)
 
     def init_sc(self):
         self.sc = ShapeContext()

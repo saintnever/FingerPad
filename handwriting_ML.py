@@ -11,7 +11,7 @@ from sklearn.metrics import confusion_matrix
 
 user_set = ['txz2', 'zx2']
 # symbol_set = ['back', 'cross', 'tick', 'ques', 'CA', 'two']
-symbol_set = ['a', 't', 'l1', 'l2', 'k', 'p']
+symbol_set = ['ac', 't', 'l1', 'l2', 'k', 'p']
 X_uset = []
 Y_uset = []
 n = 18
@@ -116,10 +116,11 @@ for i in range(len(X_uset)):
         X_total.append(X_uset[i][j])
         Y_total.append(Y_uset[i][j])
 
+cv = StratifiedKFold(3, random_state=1, shuffle=True)
 X_train, X_test, Y_train, Y_test = train_test_split(X_total, Y_total, test_size=0.2, random_state=4)
 parameters = {'kernel':('linear', 'rbf', 'poly'), 'C':[1, 10]}
 svc = svm.SVC(gamma="scale")
-clf = GridSearchCV(svc, parameters, cv=3)
+clf = GridSearchCV(svc, parameters, cv=cv)
 # clf = svm.SVC(kernel='poly', gamma='scale')
 clf.fit(X_train, Y_train)
 Y_predict = clf.predict(X_test)
@@ -128,7 +129,7 @@ cfm_ratio = [list(item/np.sum(item)) for item in cfm]
 print('CF Maxtrix is {0}, and accuracy is {1:.3f}'.format(cfm_ratio, np.mean(np.diagonal(cfm_ratio))))
 
 clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
-cv = StratifiedKFold(3, random_state=1, shuffle=True)
+# cv = StratifiedKFold(3, random_state=1, shuffle=True)
 scores = cross_val_score(clf_svm, X_total, Y_total, cv=cv)
 print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores, scores.mean(), scores.std() * 2))
 
