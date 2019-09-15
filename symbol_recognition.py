@@ -120,6 +120,8 @@ class symbol_detector():
         self.cnt = None
         self.img_cnt = 0
         self.d_HuMs = defaultdict(list)
+        self.area_ratio = list()
+        self.start_flag = 0
         self.HuM_save = dict()
         self.clf_svm = None
         self.clf_rf = None
@@ -145,6 +147,7 @@ class symbol_detector():
                 temp0 = np.average(np.array(self.q_temp), weights=range(1, self.mlen + 1), axis=0)
             else:
                 temp0 = temp_raw
+            # print(np.mean(temp0))
             temp_scale = self.colorscale(temp0, np.min(temp0), np.max(temp0))
             # assemble image
             for i, x in enumerate(temp_scale):
@@ -153,7 +156,7 @@ class symbol_detector():
                 self.img[int(row)][int(col)] = x
             # resize, blur, and binarize image
             img = self.img
-            img[img < 0.5*256] = 0
+            img[img < 0.4*256] = 0
             img = cv.resize(img, self.fsize1, interpolation=cv.INTER_CUBIC)
             img = cv.flip(img, 0)
             blur = cv.GaussianBlur(img, (31, 31), 0)
@@ -188,52 +191,62 @@ class symbol_detector():
             max_index = np.argmax(areas)
             self.cnt = contours[max_index]
             (x, y, w, h) = cv.boundingRect(self.cnt)
-            th_crop = cv.resize(th[y:y + h, x:x + w], self.hu_size, interpolation=cv.INTER_CUBIC)
-            # # find contour again
-            # contours, hierarchy = cv.findContours(th_crop, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-            # areas = [cv.contourArea(c) for c in contours]
-            # if len(areas) == 0:
-            #     continue
-            # max_index = np.argmax(areas)
-            # approx = cv.approxPolyDP(contours[max_index], 0.01 * cv.arcLength(contours[max_index], True), True)
-            approx = contours[max_index]
-            # if msvcrt.kbhit():
-            #     key = msvcrt.getch().decode()
-            #     name = 'none'
-            #     if key is '1':
-            #         name = 'play'
-            #     elif key is '2':
-            #         name = 'stop'
-            #     elif key is '3':
-            #         name = 'qus'
-            #     elif key is '4':
-            #         name = 'search'
-            #     elif key is '5':
-            #         name = 'lock'
-            #     elif key is '6':
-            #         name = 'light'
-            #     # if key is 'm':
-            #     print('{} image saved!'.format(name))
-            #     cv.imwrite('./heatlabel/' + name + '_' + str(self.img_cnt) + '.jpg', self.img)
-            #     self.img_cnt += 1
-            for sym, im in self.symbol_ims.items():
-                # th_crop = cv.resize(th[y:y + h, x:x + w], im.shape, interpolation=cv.INTER_CUBIC)
-                d_hums = list()
-                for item in im:
-                    d_hums.append(cv.matchShapes(th_crop, item, cv.CONTOURS_MATCH_I2, 0))
-                d_HuM = np.mean(d_hums)
-                self.d_HuMs[sym].append(d_HuM)
+            area_ratio = (w * h) / (th.shape[0] * th.shape[1])
+            if area_ratio > 0.5 and self.start_flag == 0:
+                self.start_flag = 1
+            if self.start_flag == 1:
+                self.area_ratio.append(area_ratio)
+            if len(self.area_ratio) > 8 and np.std(self.area_ratio[-8:]) < 0.012 and np.max(temp0) > 30:
+                # print(np.std(self.area_ratio[-8:]))
+                th_crop = cv.resize(th[y:y + h, x:x + w], self.hu_size, interpolation=cv.INTER_CUBIC)
+                # # find contour again
+                # contours, hierarchy = cv.findContours(th_crop, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+                # areas = [cv.contourArea(c) for c in contours]
+                # if len(areas) == 0:
+                #     continue
+                # max_index = np.argmax(areas)
+                # approx = cv.approxPolyDP(contours[max_index], 0.01 * cv.arcLength(contours[max_index], True), True)
+                approx = contours[max_index]
+                # if msvcrt.kbhit():
+                #     key = msvcrt.getch().decode()
+                #     name = 'none'
+                #     if key is '1':
+                #         name = 'play'
+                #     elif key is '2':
+                #         name = 'stop'
+                #     elif key is '3':
+                #         name = 'qus'
+                #     elif key is '4':
+                #         name = 'search'
+                #     elif key is '5':
+                #         name = 'lock'
+                #     elif key is '6':
+                #         name = 'light'
+                #     # if key is 'm':
+                #     print('{} image saved!'.format(name))
+                #     cv.imwrite('./heatlabel/' + name + '_' + str(self.img_cnt) + '.jpg', self.img)
+                #     self.img_cnt += 1
+                for sym, im in self.symbol_ims.items():
+                    # th_crop = cv.resize(th[y:y + h, x:x + w], im.shape, interpolation=cv.INTER_CUBIC)
+                    d_hums = list()
+                    for item in im:
+                        d_hums.append(cv.matchShapes(th[y:y+h, x:x+w], item, cv.CONTOURS_MATCH_I2, 0))
+                    d_HuM = min(d_hums)
+                    self.d_HuMs[sym].append(d_HuM)
 
-                if len(self.d_HuMs[sym]) > 10:
-                    self.d_HuMs[sym].pop(0)
-                    dist_avg = np.mean(self.d_HuMs[sym])
-                    if dist_avg < dmin:
-                        dmin = dist_avg
-                        result = sym
-            # print('{} '.format(d_HuMs))
-            print('recognized as {} with distance {}, svm {}, rf{}'
-                  .format(result, dmin, self.clf_svm.predict(self.HuM(th_crop).reshape(1, -1)),
-                          self.clf_rf.predict(self.HuM(th_crop).reshape(1, -1))))
+                    if len(self.d_HuMs[sym]) > 1:
+                        self.d_HuMs[sym].pop(0)
+                        dist_avg = np.mean(self.d_HuMs[sym])
+                        if dist_avg < dmin:
+                            dmin = dist_avg
+                            result = sym
+                # print('{} '.format(d_HuMs))
+                # print('recognized as {} with distance {}'.format(result, dmin))
+                print('recognized as {} with distance {}, svm {}, rf{}'
+                      .format(result, dmin, self.clf_svm.predict(self.HuM(th[y:y+h, x:x+w]).reshape(1, -1)),
+                              self.clf_rf.predict(self.HuM(th[y:y+h, x:x+w]).reshape(1, -1))))
+                self.area_ratio = list()
+                self.start_flag = 0
 
 
             if self.flag_rtplot:
@@ -241,21 +254,22 @@ class symbol_detector():
                 # cv.circle(blur, self.handback, 5, (127, 255, 255), -1)
                 # cv.circle(blur, self.wrist, 5, (127, 255, 255), -1)
                 cv.drawContours(blur, [self.cnt], 0, color=(255, 255, 255))
-                cv.drawContours(th_crop, [approx], 0, color=(255, 255, 255))
+                # cv.drawContours(th_crop, [approx], 0, color=(255, 255, 255))
                 (x, y, w, h) = cv.boundingRect(self.cnt)
                 cv.rectangle(blur, (x, y), (x+w, y+h), 255, 2)
 
                 self.im[0].set_array(blur)
                 self.im[1].set_array(blur)
                 self.im[2].set_array(th)
-                self.im[4].set_array(th_crop)
-                self.im[4].set_array(th_crop)
+                # self.im[4].set_array(th_crop)
+                # self.im[4].set_array(th_crop)
                 plt.pause(0.001)
 
     def init_HuM(self):
         filenames = [filename for filename in os.listdir('./heatlabel/') if filename.endswith('.jpg')]
         for filename in filenames:
             im = cv.imread('./heatlabel/' + filename, cv.IMREAD_GRAYSCALE)
+            im[im < 0.6*256] = 0
             im = cv.resize(im, self.fsize1, interpolation=cv.INTER_CUBIC)
             im = cv.GaussianBlur(im, (31, 31), 0)
             _, im = cv.threshold(im, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
@@ -266,11 +280,16 @@ class symbol_detector():
             if len(areas) == 0:
                 continue
             max_index = np.argmax(areas)
+            print(areas[max_index], im.shape[0] * im.shape[1])
+
             self.cnt = contours[max_index]
             (x, y, w, h) = cv.boundingRect(self.cnt)
-            th_crop = cv.resize(im[y:y + h, x:x + w], self.hu_size, interpolation=cv.INTER_CUBIC)
-            self.symbol_ims[filename.split('_')[0]].append(th_crop)
-            self.HuM_symbol[filename.split('_')[0]].append(self.HuM(th_crop))
+            # if (w * h) / (im.shape[0] * im.shape[1]) < 0.1:
+            #     continue
+            # th_crop = cv.resize(im[y:y + h, x:x + w], self.hu_size, interpolation=cv.INTER_CUBIC)
+            self.symbol_ims[filename.split('_')[0]].append(im[y:y+h, x:x+w])
+            if len(filename.split('_')) > 2 and 'xxh' in filename.split('_')[2]:
+                self.HuM_symbol[filename.split('_')[0]].append(self.HuM(im[y:y+h, x:x+w]))
             # self.HuM_symbol.append(self.HuM(im))
 
         # create a ML model
@@ -285,9 +304,11 @@ class symbol_detector():
         parameters = {'kernel': ('linear', 'rbf', 'poly'), 'C': [1, 10]}
         cv_ml = StratifiedKFold(3, random_state=1, shuffle=True)
         self.clf_svm = GridSearchCV(svc, parameters, cv=cv_ml)
+        print(cross_val_score(self.clf_svm, X_train, Y_train, cv=cv_ml))
         self.clf_svm.fit(X_train, Y_train)
 
         self.clf_rf = RandomForestClassifier(n_estimators=600, max_depth=5, random_state=0)
+        print(cross_val_score(self.clf_rf, X_train, Y_train, cv=cv_ml))
         self.clf_rf.fit(X_train, Y_train)
 
         # for filename in filenames:

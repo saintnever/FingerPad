@@ -114,7 +114,13 @@ class symbol_detector():
         self.n_points = 15
         self.cnt = None
         self.img_cnt = 0
+        self.save_flag = -1
+        self.area_ratio = list()
         self.HuM_save = dict()
+        self.name = 'None'
+        self.start_flag = 0
+        self.start_time = time.time()
+        self.time_duration = list()
         self.init_HuM()
         # self.init_sc()
 
@@ -138,14 +144,16 @@ class symbol_detector():
             else:
                 temp0 = temp_raw
             temp_scale = self.colorscale(temp0, np.min(temp0), np.max(temp0))
+            # if np.max(temp0) < 30:
+            #     continue
             # assemble image
             for i, x in enumerate(temp_scale):
                 row = i // 32
                 col = 31 - i % 32
                 self.img[int(row)][int(col)] = x
             # resize, blur, and binarize image
-            img = self.img
-            img[img < 0.5*256] = 0
+            img = self.img.copy()
+            img[img < 0.6*256] = 0
             img = cv.resize(img, self.fsize1, interpolation=cv.INTER_CUBIC)
             img = cv.flip(img, 0)
             blur = cv.GaussianBlur(img, (31, 31), 0)
@@ -180,7 +188,39 @@ class symbol_detector():
             max_index = np.argmax(areas)
             self.cnt = contours[max_index]
             (x, y, w, h) = cv.boundingRect(self.cnt)
-            th_crop = cv.resize(th[y:y + h, x:x + w], self.hu_size, interpolation=cv.INTER_CUBIC)
+            # print(areas[max_index] / (self.fsize1[0] * self.fsize1[1]))
+            area_ratio = w*h / (self.fsize1[0] * self.fsize1[1])
+            if area_ratio > 0.7 and self.start_flag == 0:
+                self.start_flag = 1
+                self.start_time = time.time()
+            if self.start_flag == 1:
+                self.area_ratio.append(area_ratio)
+            if len(self.area_ratio) > 8 and np.std(self.area_ratio[-8:]) < 0.012 and np.max(temp0) > 30:
+                print('{} image {} saved!'.format(self.name, self.img_cnt))
+                cv.imwrite('./heatlabel/' + self.name + '_' + str(self.img_cnt) + '_xxh_s2_2.jpg', self.img)
+                self.img_cnt += 1
+                self.area_ratio = list()
+                self.start_flag = 0
+                self.time_duration.append(time.time()-self.start_time)
+            # print(area_ratio)
+            # if 0.2 < area_ratio < 0.5 and self.save_flag == 1:
+            #     print('{} image saved!'.format(str(self.name)))
+            #     cv.imwrite('./heatlabel/' + str(self.name) + '_' + str(self.img_cnt) + '.jpg', self.img)
+            #     self.img_cnt += 1
+            # if msvcrt.kbhit():
+            #     key = msvcrt.getch().decode()
+            #     if key is 's':
+            #         self.save_flag = -self.save_flag
+            #         if self.save_flag == 1:
+            #             'start saving!'
+            #     if key is 'n':
+            #         self.name = self.name + 1
+            #         #     break
+            #         # elif key is 'm':
+            #         #     self.img_cnt += 1
+            #         #     break
+
+            th_crop = cv.resize(th[y:y + h, x:x + w], (w*5, h*5), interpolation=cv.INTER_CUBIC)
             # # find contour again
             # contours, hierarchy = cv.findContours(th_crop, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
             # areas = [cv.contourArea(c) for c in contours]
@@ -191,23 +231,29 @@ class symbol_detector():
             approx = contours[max_index]
             if msvcrt.kbhit():
                 key = msvcrt.getch().decode()
-                name = 'none'
                 if key is '1':
-                    name = 'play'
+                    self.name = 'play'
+                    self.img_cnt = 0
                 elif key is '2':
-                    name = 'stop'
+                    self.name = 'stop'
+                    self.img_cnt = 0
                 elif key is '3':
-                    name = 'qus'
+                    self.name = 'qus'
+                    self.img_cnt = 0
                 elif key is '4':
-                    name = 'search'
+                    self.name = 'lock'
+                    self.img_cnt = 0
                 elif key is '5':
-                    name = 'lock'
+                    self.name = 'search'
+                    self.img_cnt = 0
                 elif key is '6':
-                    name = 'light'
+                    self.name = 'light'
+                    self.img_cnt = 0
+                print('start {} collection'.format(self.name))
                 # if key is 'm':
-                print('{} image saved!'.format(name))
-                cv.imwrite('./heatlabel/' + name + '_' + str(self.img_cnt) + '.jpg', self.img)
-                self.img_cnt += 1
+                # print('{} image saved!'.format(name))
+                # cv.imwrite('./heatlabel/' + name + '_' + str(self.img_cnt) + '.jpg', self.img)
+                # self.img_cnt += 1
             # for sym, im in self.symbol_ims.items():
             #     # th_crop = cv.resize(th[y:y + h, x:x + w], im.shape, interpolation=cv.INTER_CUBIC)
             #     d_HuM = cv.matchShapes(th_crop, im, cv.CONTOURS_MATCH_I2, 0)
@@ -451,5 +497,7 @@ if __name__ == '__main__':
     try:
         sd.initserial()
         sd.run()
+    # except KeyboardInterrupt as e:
+
     finally:
         sd.clean()

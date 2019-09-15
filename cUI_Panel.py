@@ -174,11 +174,12 @@ class UI_panel():
                     xmin = cnt[hull[i]][0][0][0]
                     self.wrist = tuple(cnt[hull[i]][0][0])
             # use the slope between handback and fingertip to determine whether the index finger is lifted
-            self.finger_slope = (self.indextip[1] - self.handback[1]) / (self.indextip[0] - self.handback[0])
-            # self.wrist_slope = (self.wrist[1] - self.handback[1]) / (self.wrist[0] - self.handback[0])
+            # self.finger_slope = (self.indextip[1] - self.handback[1]) / (self.indextip[0] - self.handback[0])
+            self.finger_slope = (self.indextip[1] - self.wrist[1]) / (self.indextip[0] - self.wrist[0])
             # self.slope = self.finger_slope - self.wrist_slope
             self.click.clear()
-            if self.finger_slope < 0.4:
+            # if self.finger_slope < 0.4:
+            if abs(self.wrist_slope - self.finger_slope) > 0.2:
                 if self.flag_lift == 0:
                     if time.time() - self.lift_time < self.t_wait:
                         self.click.set()
@@ -187,18 +188,21 @@ class UI_panel():
                 self.slide.clear()
                 self.slides_value = [0, 0]
                 self.buttons_value = [0, 0, 0, 0]
-            elif self.finger_slope > 0.5:
+            # elif self.finger_slope > 0.5:
+            elif abs(self.wrist_slope - self.finger_slope) < 0.15:
                 # only update d when the finger first put down
                 if self.flag_lift == 1:
                     self.flag_lift = 0
                     self.click_pos = self.indextip[0]
                     self.down_time = time.time()
-                    # self.h = self.pl_distance(self.wrist, self.indextip, self.handback)
-                    self.h = self.wrist[1] - self.handback[1]
+                    self.h = self.pl_distance(self.wrist, self.indextip, self.handback)
+                    # self.h = self.wrist[1] - self.handback[1]
                     if self.h_cal == -1:
                         # self.h_cal = self.pl_distance(self.wrist, self.indextip, self.handback)
                         self.h_cal = self.wrist[1] - self.handback[1]
                         self.finger_slope_cal = self.finger_slope
+                        self.wrist_slope = (self.wrist[1] - self.indextip[1]) / (self.wrist[0] - self.indextip[0])
+
                     self.d = self.h / self.h_cal
                 else:
                     if time.time() - self.down_time > self.t_wait and abs(self.indextip[0] - self.click_pos) > 10:
@@ -234,7 +238,7 @@ class UI_panel():
                 # self.slides_value[1] = self.indextip[0] - self.click_pos
 
             print('the fh slope is {0:.02f}, h is {1:.02f}, slider_value is {2:.02f}, lift_flag is {3}, button_No {4}, slider values {5}'
-                  .format(self.finger_slope, self.h/self.h_cal, self.indextip[0], self.flag_lift, self.button_n, self.slides_value))
+                  .format(abs(self.wrist_slope - self.finger_slope), self.h/self.h_cal, self.indextip[0], self.flag_lift, self.button_n, self.slides_value))
 
             if self.flag_rtplot:
                 cv.circle(blur, self.indextip, 5, (127, 255, 255), -1)

@@ -9,9 +9,9 @@ from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearc
 
 from sklearn.metrics import confusion_matrix
 
-user_set = ['txz2', 'zx2']
+user_set = ['txz2', 'zx2', 'dxy', 'cjn']
 # symbol_set = ['back', 'cross', 'tick', 'ques', 'CA', 'two']
-symbol_set = ['ac', 't', 'l1', 'l2', 'k', 'p']
+symbol_set = ['ac', 'tv', 'l1', 'l2', 'k', 'p','bs']
 X_uset = []
 Y_uset = []
 n = 18
@@ -146,6 +146,33 @@ print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_rf, scores_rf.mean(), 
 # scores_gb = cross_val_score(clf_gb, X_total, Y_total, cv=cv)
 # print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_gb, scores_gb.mean(), scores_gb.std() * 2))
 
+# within user accuracy
+acc_within = list()
+for i in range(len(X_uset)):
+    X_total = X_uset[i]
+    Y_total = Y_uset[i]
+    cv = StratifiedKFold(2, random_state=1, shuffle=True)
+    clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
+    acc_within.append(np.mean(cross_val_score(clf_svm, X_total, Y_total, cv=cv)))
+print('Averaged within user accuracy is {}'.format(np.mean(acc_within)))
+
+# between user accuracy
+acc_between = list()
+for i in range(len(X_uset)):
+    X_test = X_uset[i]
+    Y_test = Y_uset[i]
+    X_train_total = [X_uset[m] for m in range(len(X_uset)) if m != i]
+    Y_train_total = [Y_uset[m] for m in range(len(Y_uset)) if m != i]
+    X_train = list()
+    Y_train = list()
+    for j in range(len(X_train_total)):
+        for k in range(len(X_train_total[j])):
+            X_train.append(X_train_total[j][k])
+            Y_train.append(Y_train_total[j][k])
+    clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
+    clf_svm.fit(X_train, Y_train)
+    acc_between.append(clf_svm.score(X_test, Y_test))
+print('Averaged between user accuracy is {}'.format(np.mean(acc_between)))
 
 
 #
