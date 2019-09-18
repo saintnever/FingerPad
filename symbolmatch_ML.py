@@ -213,7 +213,7 @@ if __name__ == '__main__':
     # user_set = ['zx_big', 'ztx_big']
     user_set = ['ztx_cover', 'zx_cover']
     # symbol_set = ['qus', 'light']
-    symbol_set = ['minus', 'play', 'stop', 'qus', 'plus']
+    symbol_set = ['play', 'stop', 'qus', 'search', 'light']
     fsize1 = (32 * 10, 24 * 10)
     hu_size = (20 * 10, 20 * 10)
     HuM_symbol = defaultdict(list)
@@ -240,7 +240,7 @@ if __name__ == '__main__':
     base_sc = list()
     symbols_sc = list()
     sc = ShapeContext()
-    n_points = 100
+    n_points = 50
     for filename in filenames:
         symbol = filename.split('.')[0]
         # if symbol not in symbol_set:
@@ -251,7 +251,7 @@ if __name__ == '__main__':
         _, imref = cv.threshold(imref, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
         kernel = np.ones((5, 5), np.uint8)
         imref = cv.morphologyEx(imref, cv.MORPH_CLOSE, kernel)
-        # imrefs[symbol] = imref
+        imrefs[symbol] = imref
         # orbrefs[symbol] = orb.detectAndCompute(imref, None)
         # # surfrefs[symbol] = surf.detectAndCompute(imref, None)
         # if orbrefs[symbol][1] is None:
@@ -271,10 +271,14 @@ if __name__ == '__main__':
         #shape context
         base_sc.append(parse_img(imref[y:y+h, x:x+w], sc, n_points))
         symbols_sc.append(symbol)
-        # cv.imshow(symbol, imref)
+
+        # plt.figure()
+        # plt.imshow(imref[y:y+h, x:x+w])
         # plt.show()
 
     bf = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=False)
+    X_sc = list()
+    Y_sc = list()
     for user in user_set:
         path = './heatlabel/data/' + user + '/'
         filenames = [filename for filename in os.listdir(path) if filename.endswith('.jpg')]
@@ -284,7 +288,7 @@ if __name__ == '__main__':
                 continue
             im = cv.imread(path + filename, cv.IMREAD_GRAYSCALE)
             # print(np.amax(im))
-            im[im < 0.5*255] = 0
+            im[im < 0.2*255] = 0
             im = cv.resize(im, fsize1, interpolation=cv.INTER_CUBIC)
             im = cv.flip(im, 0)
             im = cv.GaussianBlur(im, (31, 31), 0)
@@ -306,6 +310,8 @@ if __name__ == '__main__':
 
             #shape context match
             recognize = parse_img(imt, sc, n_points)
+            X_sc.append(recognize)
+            Y_sc.append(symbol)
             idxrec, res = match(base_sc, recognize)
             print(symbol, symbols_sc[idxrec], res, len(recognize))
             # #orb shapematch
@@ -349,25 +355,27 @@ if __name__ == '__main__':
     #         # print(hv)
     #         X_train.append(hv)
     #         Y_train.append(k)
-    # svc = svm.SVC(gamma="scale")
-    # parameters = {'kernel': ('linear', 'rbf', 'poly'), 'C': [1, 10]}
-    # cv_ml = StratifiedKFold(2, random_state=1, shuffle=True)
-    # clf_svm = GridSearchCV(svc, parameters, cv=cv_ml)
-    # print(cross_val_score(clf_svm, X_train, Y_train, cv=cv_ml))
-    # clf_svm.fit(X_train, Y_train)
-    #
-    # clf_rf = RandomForestClassifier(n_estimators=1000, max_depth=9, random_state=0)
-    # scores_rf = cross_val_score(clf_rf, X_train, Y_train, cv=cv_ml)
-    # print("{0} RandomForest Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_rf, scores_rf.mean(), scores_rf.std() * 2))
-    # # clf_rf.fit(X_train, Y_train)
-    # X_train1, X_test1, Y_train1, Y_test1 = train_test_split(X_train, Y_train, test_size=0.3, random_state=4)
-    # clf_rf.fit(X_train1, Y_train1)
-    # Y_predict = clf_rf.predict(X_test1)
-    # # acc_between.append(np.sum(Y_predict == Y_test)/ len(Y_test))
-    # cfm = confusion_matrix(Y_test1, Y_predict, labels=symbol_set)
-    # cfm_ratio = [list(item / np.sum(item)) for item in cfm]
-    # print(cfm_ratio)
-    #
-    # clf_gb = GradientBoostingClassifier()
-    # scores_gb = cross_val_score(clf_gb, X_train, Y_train, cv=cv_ml)
-    # print("{0} GradientBoosting Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_gb, scores_gb.mean(), scores_gb.std() * 2))
+    X_train = X_sc
+    Y_train = Y_sc
+    svc = svm.SVC(gamma="scale")
+    parameters = {'kernel': ('linear', 'rbf', 'poly'), 'C': [1, 10]}
+    cv_ml = StratifiedKFold(2, random_state=1, shuffle=True)
+    clf_svm = GridSearchCV(svc, parameters, cv=cv_ml)
+    print(cross_val_score(clf_svm, X_train, Y_train, cv=cv_ml))
+    clf_svm.fit(X_train, Y_train)
+
+    clf_rf = RandomForestClassifier(n_estimators=2000, max_depth=9, random_state=0)
+    scores_rf = cross_val_score(clf_rf, X_train, Y_train, cv=cv_ml)
+    print("{0} RandomForest Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_rf, scores_rf.mean(), scores_rf.std() * 2))
+    # clf_rf.fit(X_train, Y_train)
+    X_train1, X_test1, Y_train1, Y_test1 = train_test_split(X_train, Y_train, test_size=0.3, random_state=4)
+    clf_rf.fit(X_train1, Y_train1)
+    Y_predict = clf_rf.predict(X_test1)
+    # acc_between.append(np.sum(Y_predict == Y_test)/ len(Y_test))
+    cfm = confusion_matrix(Y_test1, Y_predict, labels=symbol_set)
+    cfm_ratio = [list(item / np.sum(item)) for item in cfm]
+    print(cfm_ratio)
+
+    clf_gb = GradientBoostingClassifier()
+    scores_gb = cross_val_score(clf_gb, X_train, Y_train, cv=cv_ml)
+    print("{0} GradientBoosting Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_gb, scores_gb.mean(), scores_gb.std() * 2))

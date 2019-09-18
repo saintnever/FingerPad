@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 class ShapeContext(object):
 
-    def __init__(self, nbins_r=5, nbins_theta=12, r_inner=0.1250, r_outer=2.0):
+    def __init__(self, nbins_r=3, nbins_theta=6, r_inner=0.1250, r_outer=2.0):
         # number of radius zones
         self.nbins_r = nbins_r
         # number of angles zones
