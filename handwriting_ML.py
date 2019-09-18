@@ -3,18 +3,77 @@ import pickle
 import os
 import scipy
 from sklearn import svm
+import pandas as pd
 from sklearn.model_selection import cross_val_score
+from matplotlib import pyplot as plt
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
-
 from sklearn.metrics import confusion_matrix
+from sklearn.utils.multiclass import unique_labels
+import seaborn as sn
 
-user_set = ['txz2', 'zx2', 'dxy', 'cjn']
+
+def plot_confusion_matrix(y_true, y_pred, classes,
+                          normalize=False,
+                          title=None,
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if not title:
+        if normalize:
+            title = 'Normalized confusion matrix'
+        else:
+            title = 'Confusion matrix, without normalization'
+
+    # Compute confusion matrix
+    cm = confusion_matrix(y_true, y_pred)
+    # Only use the labels that appear in the data
+    classes = classes[unique_labels(y_true, y_pred)]
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(cm, interpolation='nearest', cmap=cmap)
+    ax.figure.colorbar(im, ax=ax)
+    # We want to show all ticks...
+    ax.set(xticks=np.arange(cm.shape[1]),
+           yticks=np.arange(cm.shape[0]),
+           # ... and label them with the respective list entries
+           xticklabels=classes, yticklabels=classes,
+           title=title,
+           ylabel='True label',
+           xlabel='Predicted label')
+
+    # Rotate the tick labels and set their alignment.
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+             rotation_mode="anchor")
+
+    # Loop over data dimensions and create text annotations.
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(j, i, format(cm[i, j], fmt),
+                    ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black")
+    fig.tight_layout()
+    return ax
+
+user_set = ['txz2', 'zx2', 'dxy', 'cjn', 'hn', 'gtt']
 # symbol_set = ['back', 'cross', 'tick', 'ques', 'CA', 'two']
-symbol_set = ['ac', 'tv', 'l1', 'l2', 'k', 'p','bs']
+symbol_set = ['ac', 'tv', 'l1', 'l2', 'k', 'p', 'a', 't', 'bs']
+classname = ['AC', 'TV', 'L1',  'L2', 'K', 'P', 'A', 'T', '$\leftarrow$']
+
 X_uset = []
 Y_uset = []
-n = 18
+n = 12
 for user in user_set:
     path = './handwriting/'+user+'/processed/'
     filenames = [filename for filename in os.listdir(path) if filename.endswith('_dir.pkl')]
@@ -36,7 +95,8 @@ for user in user_set:
             angle = list()
             amp_filtered = list()
             for i, amp in enumerate(amplitude):
-                if amp > 0.1*np.mean(amplitude):
+                if amp > 0.2 * np.mean(amplitude):
+                # if amp > 0:
                     angle.append(angle_raw[i])
                     amp_filtered.append(amp)
             # print(max(amplitude), min(amplitude), np.mean(amplitude))
@@ -78,6 +138,7 @@ for user in user_set:
             # X.append(np.roll(x,i))
             # X.append(list(x_first) + list(x_second) + list(amp_hist))
             X.append(list(x_first) + list(x_second) + list(amp_first_hist) + list(amp_second_hist))
+            # X.append(list(amp_first_hist) + list(amp_second_hist))
             # X.append(list(x_first) + list(x_second))
             # X.append(x + list(amp_hist))
             Y.append(result)
@@ -116,16 +177,32 @@ for i in range(len(X_uset)):
         X_total.append(X_uset[i][j])
         Y_total.append(Y_uset[i][j])
 
+# plot the features for two gestures
+feature_ac = X_total[0]
+feature_tv = X_total[421]
+fig, ax = plt.subplots(2, 1,sharex='all', sharey='all')
+ax[0].bar(range(len(feature_ac)), feature_ac)
+# plt.show()
+ax[1].bar(range(len(feature_tv)), feature_tv)
+plt.xlim([0,47])
+plt.show()
+
+np.set_printoptions(precision=2)
 cv = StratifiedKFold(3, random_state=1, shuffle=True)
-X_train, X_test, Y_train, Y_test = train_test_split(X_total, Y_total, test_size=0.2, random_state=4)
+X_train, X_test, Y_train, Y_test = train_test_split(X_total, Y_total, test_size=0.3, random_state=4)
 parameters = {'kernel':('linear', 'rbf', 'poly'), 'C':[1, 10]}
 svc = svm.SVC(gamma="scale")
 clf = GridSearchCV(svc, parameters, cv=cv)
+print(clf)
 # clf = svm.SVC(kernel='poly', gamma='scale')
 clf.fit(X_train, Y_train)
 Y_predict = clf.predict(X_test)
 cfm = confusion_matrix(Y_test, Y_predict, labels=symbol_set)
 cfm_ratio = [list(item/np.sum(item)) for item in cfm]
+# df_cm = pd.DataFrame(cfm_ratio, classname, classname)
+# sn.set(font_scale=1.4)
+# sn.heatmap(df_cm, annot=True, annot_kws={'size':14}, fmt='.2f', cmap="YlGnBu")
+# plt.show()
 print('CF Maxtrix is {0}, and accuracy is {1:.3f}'.format(cfm_ratio, np.mean(np.diagonal(cfm_ratio))))
 
 clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
@@ -133,14 +210,10 @@ clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
 scores = cross_val_score(clf_svm, X_total, Y_total, cv=cv)
 print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores, scores.mean(), scores.std() * 2))
 
-clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
-clf_svm.fit(X_uset[0], Y_uset[0])
-print('Between user accuracy {}'.format(clf_svm.score(X_uset[1], Y_uset[1])))
-
-clf_rf = RandomForestClassifier(n_estimators=600, max_depth=5, random_state=0)
-# clf_rf.fit(X, Y)
-scores_rf = cross_val_score(clf_rf, X_total, Y_total, cv=cv)
-print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_rf, scores_rf.mean(), scores_rf.std() * 2))
+# clf_rf = RandomForestClassifier(n_estimators=3000, max_depth=9, random_state=0)
+# # clf_rf.fit(X, Y)
+# scores_rf = cross_val_score(clf_rf, X_total, Y_total, cv=cv)
+# print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_rf, scores_rf.mean(), scores_rf.std() * 2))
 #
 # clf_gb = GradientBoostingClassifier()
 # scores_gb = cross_val_score(clf_gb, X_total, Y_total, cv=cv)
@@ -148,16 +221,31 @@ print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_rf, scores_rf.mean(), 
 
 # within user accuracy
 acc_within = list()
+cv = StratifiedKFold(2, random_state=1, shuffle=True)
+acc_matrix = np.zeros((len(symbol_set), len(symbol_set)))
 for i in range(len(X_uset)):
     X_total = X_uset[i]
     Y_total = Y_uset[i]
-    cv = StratifiedKFold(2, random_state=1, shuffle=True)
     clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
-    acc_within.append(np.mean(cross_val_score(clf_svm, X_total, Y_total, cv=cv)))
-print('Averaged within user accuracy is {}'.format(np.mean(acc_within)))
+    # acc_within.append(np.mean(cross_val_score(clf_svm, X_total, Y_total, cv=cv)))
+    X_train, X_test, Y_train, Y_test = train_test_split(X_total, Y_total, test_size=0.3, random_state=4)
+    clf_svm.fit(X_train, Y_train)
+    Y_predict = clf_svm.predict(X_test)
+    acc_within.append(np.sum(Y_predict == Y_test)/ len(Y_test))
+    cfm = confusion_matrix(Y_test, Y_predict, labels=symbol_set)
+    cfm_ratio = [list(item / np.sum(item)) for item in cfm]
+    acc_matrix += cfm_ratio
+    print('{} within accuracy is {}'.format(user_set[i], acc_within[-1]))
+
+print('Averaged within user accuracy is {}, std is {}'.format(np.mean(acc_within), np.std(acc_within)))
+df_cm = pd.DataFrame(acc_matrix/len(user_set), classname, classname)
+sn.set(font_scale=1.4)
+sn.heatmap(df_cm, annot=True, annot_kws={'size':14}, fmt='.2f', cmap="YlGnBu")
+plt.show()
 
 # between user accuracy
 acc_between = list()
+acc_matrix = np.zeros((len(symbol_set), len(symbol_set)))
 for i in range(len(X_uset)):
     X_test = X_uset[i]
     Y_test = Y_uset[i]
@@ -171,8 +259,20 @@ for i in range(len(X_uset)):
             Y_train.append(Y_train_total[j][k])
     clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
     clf_svm.fit(X_train, Y_train)
+    Y_predict = clf_svm.predict(X_test)
+    # acc_between.append(np.sum(Y_predict == Y_test)/ len(Y_test))
+    cfm = confusion_matrix(Y_test, Y_predict, labels=symbol_set)
+    cfm_ratio = [list(item / np.sum(item)) for item in cfm]
+    acc_matrix += cfm_ratio
+    # print(cfm_ratio)
     acc_between.append(clf_svm.score(X_test, Y_test))
-print('Averaged between user accuracy is {}'.format(np.mean(acc_between)))
+    print('{} between accuracy is {}'.format(user_set[i], acc_between[-1]))
+print('Averaged between user accuracy is {}, std is {}'.format(np.mean(acc_between), np.std(acc_between)))
+print('Averaged between user confusion matrix is {}'.format(acc_matrix/len(user_set)))
+df_cm = pd.DataFrame(acc_matrix/len(user_set), classname, classname)
+sn.set(font_scale=1.4)
+sn.heatmap(df_cm, annot=True, annot_kws={'size':14}, fmt='.2f', cmap="YlGnBu")
+plt.show()
 
 
 #

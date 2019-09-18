@@ -22,6 +22,10 @@ import pickle
 from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
 import argparse
+import os
+
+
+
 class SerialReader(threading.Thread):
     def __init__(self, stop_event, sig, serport):
         threading.Thread.__init__(self)
@@ -83,8 +87,13 @@ class SerialReader(threading.Thread):
             self.s.close()
             # print('the serial port is open? {}'.format(self.s.isOpen()))
 
-class UI_panel():
-    def __init__(self, com, rtplot):
+class UI_panel(threading.Thread):
+    def __init__(self, com, rtplot, signal, name):
+        threading.Thread.__init__(self)
+        self.original_data = []
+        self.original_time = []
+        self.name = name
+        self.signal = signal
         self.fsize = (24*10, 32*10)
         self.fsize1 = (32*10, 24*10)
         # self.fsize = self.fsize1
@@ -95,8 +104,8 @@ class UI_panel():
         self.tempq = queue.Queue()
         self.stop_event = threading.Event()
         self.img = np.array([[1] * 32 for _ in range(24)], np.uint8)
-        self.buttons_value = [0, 0, 0, 0]
-        self.slides_value = [0, 0]
+        self.buttons_value = [0, 0]
+        self.slides_value = [0]
         self.indextip = (0, 0)
         self.handback = (0, 0)
         self.wrist = (0, 0)
@@ -113,10 +122,13 @@ class UI_panel():
         self.h = 0
         self.slide = threading.Event()
         self.click = threading.Event()
-        self.t_wait = 1
+        self.t_wait = 1.5
         self.slider_n = 0
         self.button_n = 0
         self.d = 1
+
+        self.zx_slide_start = 0
+        self.zx_temp = 0
 
     def initserial(self):
         self.reader = SerialReader(self.stop_event, self.tempq, self.com)
@@ -125,13 +137,14 @@ class UI_panel():
     def clean(self):
         self.stop_event.set()
         self.reader.clean()
-        self.reader.clean()
         
     def run(self):
         if self.flag_rtplot:
             self.rtplot()
         while not self.stop_event.is_set():
             time0, temp_raw = self.tempq.get()
+            self.original_data.append(temp_raw)
+            self.original_time.append(time0)
             temp_scale = self.colorscale(temp_raw, np.min(temp_raw), np.max(temp_raw))
             # assemble image
             for i, x in enumerate(temp_scale):
@@ -146,7 +159,7 @@ class UI_panel():
             img = cv.flip(img, 0)
             # img = img.transpose()
             blur = cv.GaussianBlur(img, (31, 31), 0)
-            # ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            # ret, th = cv.threshold(blur, np.amax(blur) * 0.8, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
             ret, th = cv.threshold(blur, np.amax(blur) * 0.6, 255, cv.THRESH_BINARY)
             # use the largest contour as the hand contour
             contours, hierarchy = cv.findContours(th, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)  # cv2.RETR_TREE
@@ -155,17 +168,13 @@ class UI_panel():
                 continue
             max_index = np.argmax(areas)
             cnt = contours[max_index]
-            x, y, w, h = cv.boundingRect(cnt)
-            center = [int(x + w / 2), int(y + h / 2)]
-            cv.circle(blur, tuple(center), 6, (0, 255, 255), -1)
-
             # use convext hull to find the fingertip and hand back location
             hull = cv.convexHull(cnt, returnPoints=False)
             xmax = 0
             ymin = 10000
             xmin = 10000
             for i in range(len(hull)):
-                cv.circle(blur, tuple(cnt[hull[i]][0][0]), 6, (0, 255, 255), -1)
+                # cv.circle(blur, tuple(cnt[hull[i]][0][0]), 6, (127, 255, 255), -1)
                 # find is the hull point that has the largest x value (furthest from the wrist)
                 if cnt[hull[i]][0][0][0] > xmax:
                     xmax = cnt[hull[i]][0][0][0]
@@ -177,45 +186,34 @@ class UI_panel():
                 if cnt[hull[i]][0][0][0] < xmin:
                     xmin = cnt[hull[i]][0][0][0]
                     self.wrist = tuple(cnt[hull[i]][0][0])
-            defects = cv.convexityDefects(cnt, hull)
-            distmax = 0
-            max_df = (0,0)
-            # temp1 = np.zeros_like(blur0)
-            for l in range(defects.shape[0]):
-                s, e, fa, d = defects[l, 0]
-                start = tuple(cnt[s][0])
-                end = tuple(cnt[e][0])
-                far = tuple(cnt[fa][0])
-                cv.circle(blur, far, 4, (255, 255, 255), -1)
-                if d > distmax:
-                    distmax = d
-                    max_df = far
-            cv.circle(blur, max_df, 8, (127, 255, 255), -1)
-            print(max_df, distmax)
             # use the slope between handback and fingertip to determine whether the index finger is lifted
             # self.finger_slope = (self.indextip[1] - self.handback[1]) / (self.indextip[0] - self.handback[0])
             self.finger_slope = (self.indextip[1] - self.wrist[1]) / (self.indextip[0] - self.wrist[0])
             # self.slope = self.finger_slope - self.wrist_slope
             self.click.clear()
+            # if self.d > 0.8:
+            #     c = 0.25
+            # else:
+            #     c = 0.35
             # if self.finger_slope < 0.4:
-            if abs(self.wrist_slope - self.finger_slope) > 0.2:
+            if abs(self.wrist_slope - self.finger_slope) > 0.25:
                 if self.flag_lift == 0:
                     if time.time() - self.lift_time < self.t_wait:
                         self.click.set()
                 self.lift_time = time.time()
                 self.flag_lift = 1
                 self.slide.clear()
-                self.slides_value = [0, 0]
-                self.buttons_value = [0, 0, 0, 0]
+                self.slides_value = [0]
+                self.buttons_value = [0, 0]
             # elif self.finger_slope > 0.5:
-            elif abs(self.wrist_slope - self.finger_slope) < 0.15:
+            elif abs(self.wrist_slope - self.finger_slope) < 0.2:
                 # only update d when the finger first put down
                 if self.flag_lift == 1:
                     self.flag_lift = 0
                     self.click_pos = self.indextip[0]
                     self.down_time = time.time()
-                    self.h = self.pl_distance(self.wrist, self.indextip, self.handback)
-                    # self.h = self.wrist[1] - self.handback[1]
+                    # self.h = self.pl_distance(self.wrist, self.indextip, self.handback)
+                    self.h = self.wrist[1] - self.handback[1]
                     if self.h_cal == -1:
                         # self.h_cal = self.pl_distance(self.wrist, self.indextip, self.handback)
                         self.h_cal = self.wrist[1] - self.handback[1]
@@ -226,11 +224,11 @@ class UI_panel():
                 else:
                     if time.time() - self.down_time > self.t_wait and abs(self.indextip[0] - self.click_pos) > 10:
                         self.slide.set()
-                        if self.d > 0.8:
-                            self.slider_n = 0
-                        else:
-                            self.slider_n = 1
-                    # cv.boundingRect(cnt)
+                        # if self.d > 0.8:
+                        self.slider_n = 0
+                    #     else:
+                    #         self.slider_n = 1
+                    # # cv.boundingRect(cnt)
             # determine the button clicked based on hand height ratio and fingertip location
             self.slope_prev = self.slope
             # if self.h_cal != 0:
@@ -238,23 +236,30 @@ class UI_panel():
             if self.click.is_set():
                 print('Click!')
                 if self.d > 0.8:
-                    if self.click_pos < 190:
-                        self.buttons_value[0] = 1
-                        self.button_n = 0
-                    else:
-                        self.buttons_value[1] = 1
-                        self.button_n = 1
+                    self.buttons_value[0] = 1
+                    self.button_n = 0
                 else:
-                    if self.click_pos < 190 - 20:
-                        self.buttons_value[3] = 1
-                        self.button_n = 3
-                    else:
-                        self.buttons_value[2] = 1
-                        self.button_n = 2
+
+                    self.buttons_value[1] = 1
+                    self.button_n = 1
+                self.signal.put(['click',self.button_n])
+
             if self.slide.is_set():
                 print('Slide!')
-                self.slides_value[self.slider_n] = self.indextip[0] - self.click_pos
+                temp_slide_value = self.indextip[0] - self.click_pos
+                self.slides_value[self.slider_n] = temp_slide_value
+                if self.zx_slide_start == 0:
+                    self.zx_slide_start = 1
+                    self.zx_slide_start_value = temp_slide_value
+                    self.zx_slide_n = self.slider_n
+                else:
+                    self.zx_temp = temp_slide_value
+
                 # self.slides_value[1] = self.indextip[0] - self.click_pos
+            if self.zx_slide_start == 1 and self.flag_lift == 1:
+                self.zx_slide_start = 0
+                self.signal.put(['slide'+str(self.zx_slide_n), self.zx_slide_start_value - self.zx_temp])
+
 
             print('the fh slope is {0:.02f}, h is {1:.02f}, slider_value is {2:.02f}, lift_flag is {3}, button_No {4}, slider values {5}'
                   .format(abs(self.wrist_slope - self.finger_slope), self.h/self.h_cal, self.indextip[0], self.flag_lift, self.button_n, self.slides_value))
@@ -268,6 +273,15 @@ class UI_panel():
                 self.im[2].set_array(th)
                 plt.pause(0.001)
 
+    def handle_close(self, evt):
+        print("close!!!!!")
+        self.reader.clean()
+        save_dir = './exp_2/' + self.name + '/original_data/'
+        if os.path.exists(save_dir) is False:
+            os.makedirs(save_dir)
+        with open(save_dir + self.name + '_dir.pkl', 'wb') as file:
+            pickle.dump([self.original_time, self.original_data], file)
+
     def rtplot(self):
         fig, ([ax0, ax1], [ax2, ax3], [ax4, ax5]) = plt.subplots(3, 2)
         im0 = ax0.imshow(np.random.uniform(low=0, high=255, size=self.fsize), cmap='seismic')
@@ -279,13 +293,14 @@ class UI_panel():
         self.im = [im0, im1, im2, im3, im4, im5]
         plt.tight_layout()
         plt.ion()
+        fig.canvas.mpl_connect("close_event", self.handle_close)
 
     def colorscale(self, datas, minc, maxc):
         data_scales = list()
         for data in datas:
             data_scale = int(256 * (data - minc) / (maxc - minc))
+            # if data_scale < 0.5 * 256:
             if data_scale < 0:
-            # if data_scale < 0 or data < maxc * 0.8:
                 data_scale = 0
             elif data_scale > 255:
                 data_scale = 255
@@ -332,7 +347,10 @@ class UI_panel():
         return self.button_n
 
 if __name__ == '__main__':
-    ui = UI_panel(com='COM16', rtplot=True)
+    name = 'test'
+    q = queue.Queue()
+
+    ui = UI_panel(com='COM16', rtplot=True, signal=q, name=name)
     try:
          ui.initserial()
          ui.run()

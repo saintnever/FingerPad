@@ -153,7 +153,7 @@ class symbol_detector():
                 self.img[int(row)][int(col)] = x
             # resize, blur, and binarize image
             img = self.img.copy()
-            img[img < 0.6*256] = 0
+            # img[img < 0.2*256] = 0
             img = cv.resize(img, self.fsize1, interpolation=cv.INTER_CUBIC)
             img = cv.flip(img, 0)
             blur = cv.GaussianBlur(img, (31, 31), 0)
@@ -190,14 +190,14 @@ class symbol_detector():
             (x, y, w, h) = cv.boundingRect(self.cnt)
             # print(areas[max_index] / (self.fsize1[0] * self.fsize1[1]))
             area_ratio = w*h / (self.fsize1[0] * self.fsize1[1])
-            if area_ratio > 0.7 and self.start_flag == 0:
+            if area_ratio > 0.6 and self.start_flag == 0:
                 self.start_flag = 1
                 self.start_time = time.time()
             if self.start_flag == 1:
                 self.area_ratio.append(area_ratio)
-            if len(self.area_ratio) > 8 and np.std(self.area_ratio[-8:]) < 0.012 and np.max(temp0) > 30:
+            if 0.1 <area_ratio < 0.6 and len(self.area_ratio) > 8 and np.std(self.area_ratio[-8:]) < 0.015 and np.max(temp0) > 30:
                 print('{} image {} saved!'.format(self.name, self.img_cnt))
-                cv.imwrite('./heatlabel/' + self.name + '_' + str(self.img_cnt) + '_xxh_s2_2.jpg', self.img)
+                # cv.imwrite('./heatlabel/' + self.name + '_' + str(self.img_cnt) + '_xxh_s2_2.jpg', self.img)
                 self.img_cnt += 1
                 self.area_ratio = list()
                 self.start_flag = 0
@@ -248,6 +248,12 @@ class symbol_detector():
                     self.img_cnt = 0
                 elif key is '6':
                     self.name = 'light'
+                    self.img_cnt = 0
+                elif key is '7':
+                    self.name = 'plus'
+                    self.img_cnt = 0
+                elif key is '8':
+                    self.name = 'minus'
                     self.img_cnt = 0
                 print('start {} collection'.format(self.name))
                 # if key is 'm':

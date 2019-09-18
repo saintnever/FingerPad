@@ -125,8 +125,13 @@ class symbol_detector():
         self.HuM_save = dict()
         self.clf_svm = None
         self.clf_rf = None
-        self.init_HuM()
-        # self.init_sc()
+        # self.init_HuM()
+        self.kp1 = None
+        self.des1 = None
+        self.bf = None
+        self.orb = None
+        # self.init_ORB()
+        self.init_sc()
 
     def initserial(self):
         self.reader = SerialReader(self.stop_event, self.tempq, self.com)
@@ -156,7 +161,7 @@ class symbol_detector():
                 self.img[int(row)][int(col)] = x
             # resize, blur, and binarize image
             img = self.img
-            img[img < 0.4*256] = 0
+            # img[img < 0.4*256] = 0
             img = cv.resize(img, self.fsize1, interpolation=cv.INTER_CUBIC)
             img = cv.flip(img, 0)
             blur = cv.GaussianBlur(img, (31, 31), 0)
@@ -247,8 +252,31 @@ class symbol_detector():
                               self.clf_rf.predict(self.HuM(th[y:y+h, x:x+w]).reshape(1, -1))))
                 self.area_ratio = list()
                 self.start_flag = 0
-
-
+            # kp, des = self.orb.detectAndCompute(th[y:y+h, x:x+w], None)
+            # matches = self.bf.knnMatch(self.des1, des, k=2)
+            # good = []
+            # MIN_MATCH_COUNT = 5
+            #
+            # for m, n in matches:
+            #     if m.distance < 0.75*n.distance:
+            #         good.append([m])
+            #
+            # if len(good) > 5:
+            #     src_pts = np.float32([self.kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+            #     dst_pts = np.float32([kp[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+            #
+            #     M, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, 5.0)
+            #     matchesMask = mask.ravel().tolist()
+            #
+            #     # h, w = img1.shape
+            #     pts = np.float32([[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]).reshape(-1, 1, 2)
+            #     dst = cv.perspectiveTransform(pts, M)
+            #     print(dst)
+            #     img2 = cv.polylines(img2, [np.int32(dst)], True, 255, 3, cv.LINE_AA)
+            #
+            # else:
+            #     print("Not enough matches are found - %d/%d" % (len(good), MIN_MATCH_COUNT))
+            #     matchesMask = None
             if self.flag_rtplot:
                 # cv.circle(blur, self.indextip, 5, (127, 255, 255), -1)
                 # cv.circle(blur, self.handback, 5, (127, 255, 255), -1)
@@ -265,32 +293,51 @@ class symbol_detector():
                 # self.im[4].set_array(th_crop)
                 plt.pause(0.001)
 
-    def init_HuM(self):
-        filenames = [filename for filename in os.listdir('./heatlabel/') if filename.endswith('.jpg')]
-        for filename in filenames:
-            im = cv.imread('./heatlabel/' + filename, cv.IMREAD_GRAYSCALE)
-            im[im < 0.6*256] = 0
-            im = cv.resize(im, self.fsize1, interpolation=cv.INTER_CUBIC)
-            im = cv.GaussianBlur(im, (31, 31), 0)
-            _, im = cv.threshold(im, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-            kernel = np.ones((3, 3), np.uint8)
-            im = cv.erode(im, kernel)
-            contours, hierarchy = cv.findContours(im, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-            areas = [cv.contourArea(c) for c in contours]
-            if len(areas) == 0:
-                continue
-            max_index = np.argmax(areas)
-            print(areas[max_index], im.shape[0] * im.shape[1])
+    def init_ORB(self):
+        self.orb = cv.ORB_create()
+        im = cv.imread('./heatlabel/archive/stop.jpg', cv.IMREAD_GRAYSCALE)
+        # im[im < 0.6*256] = 0
+        im = cv.resize(im, self.fsize1, interpolation=cv.INTER_CUBIC)
+        im = cv.GaussianBlur(im, (31, 31), 0)
+        _, im = cv.threshold(im, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+        self.kp1, self.des1 = self.orb.detectAndCompute(im, None)
+        self.bf = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)
 
-            self.cnt = contours[max_index]
-            (x, y, w, h) = cv.boundingRect(self.cnt)
-            # if (w * h) / (im.shape[0] * im.shape[1]) < 0.1:
-            #     continue
-            # th_crop = cv.resize(im[y:y + h, x:x + w], self.hu_size, interpolation=cv.INTER_CUBIC)
-            self.symbol_ims[filename.split('_')[0]].append(im[y:y+h, x:x+w])
-            if len(filename.split('_')) > 2 and 'xxh' in filename.split('_')[2]:
-                self.HuM_symbol[filename.split('_')[0]].append(self.HuM(im[y:y+h, x:x+w]))
-            # self.HuM_symbol.append(self.HuM(im))
+    def init_HuM(self):
+        user_set = ['ztx', 'xxh', 'hn', 'xxw']
+        symbol_set = ['play', 'stop', 'qus', 'lock', 'search', 'light']
+        for user in user_set:
+            path = './heatlabel/data/'+user+'/'
+            filenames = [filename for filename in os.listdir(path) if filename.endswith('.jpg')]
+            for filename in filenames:
+                symbol = filename.split('_')[0]
+                if symbol not in symbol_set:
+                    continue
+                im = cv.imread(path + filename, cv.IMREAD_GRAYSCALE)
+                # im[im < 0.6*256] = 0
+                im = cv.resize(im, self.fsize1, interpolation=cv.INTER_CUBIC)
+                im = cv.GaussianBlur(im, (31, 31), 0)
+                # _, im = cv.threshold(im, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+                _, im = cv.threshold(im, 255*0.6, 255, cv.THRESH_BINARY)
+                kernel = np.ones((3, 3), np.uint8)
+                im = cv.erode(im, kernel)
+                contours, hierarchy = cv.findContours(im, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+                areas = [cv.contourArea(c) for c in contours]
+                if len(areas) == 0:
+                    continue
+                max_index = np.argmax(areas)
+                # print(areas[max_index], im.shape[0] * im.shape[1])
+
+                self.cnt = contours[max_index]
+                (x, y, w, h) = cv.boundingRect(self.cnt)
+                # if (w * h) / (im.shape[0] * im.shape[1]) < 0.1:
+                #     continue
+                # th_crop = cv.resize(im[y:y + h, x:x + w], self.hu_size, interpolation=cv.INTER_CUBIC)
+                self.symbol_ims[symbol].append(im[y:y+h, x:x+w])
+                # if len(filename.split('_')) > 2 and 'xxh' in filename.split('_')[2]:
+                # if 'lock' not in filename.split('_')[0]:
+                self.HuM_symbol[symbol].append(self.HuM(im[y:y+h, x:x+w]))
+                # self.HuM_symbol.append(self.HuM(im))
 
         # create a ML model
         X_train = list()
@@ -307,7 +354,7 @@ class symbol_detector():
         print(cross_val_score(self.clf_svm, X_train, Y_train, cv=cv_ml))
         self.clf_svm.fit(X_train, Y_train)
 
-        self.clf_rf = RandomForestClassifier(n_estimators=600, max_depth=5, random_state=0)
+        self.clf_rf = RandomForestClassifier(n_estimators=1000, max_depth=5, random_state=0)
         print(cross_val_score(self.clf_rf, X_train, Y_train, cv=cv_ml))
         self.clf_rf.fit(X_train, Y_train)
 
@@ -348,8 +395,9 @@ class symbol_detector():
         # Calculate Hu Moments
         huMoments = cv.HuMoments(moment)
         re_huMoments = []
-        for i in range(0, 6):
+        for i in range(len(huMoments)):
             re_huMoments.append(-np.sign(huMoments[i][0]) * np.log10(abs(huMoments[i][0])))
+        re_huMoments.append(im.shape[0]/im.shape[1])
         return np.array(re_huMoments)
 
     def init_sc(self):
@@ -362,6 +410,7 @@ class symbol_detector():
             im = cv.imread('./heatlabel/'+filename, cv.IMREAD_GRAYSCALE)  # 直接读取为灰度图
             # im = cv.bitwise_not(im)
             im = cv.resize(im, self.fsize1, interpolation=cv.INTER_CUBIC)
+            im = cv.flip(im, 0)
             blur = cv.GaussianBlur(im, (31, 31), 0)
             ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
             # th = cv.dilate(th, kernel, iterations=1)
@@ -478,7 +527,7 @@ class symbol_detector():
         for data in datas:
             data_scale = int(256 * (data - minc) / (maxc - minc))
             # if data_scale < 0.5 * 256:
-            if data_scale < 0:
+            if data_scale < 0 or data < maxc*0.8:
                 data_scale = 0
             elif data_scale > 255:
                 data_scale = 255
