@@ -28,6 +28,7 @@ from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
 from sklearn.metrics import confusion_matrix
+from shape_context import ShapeContext
 
 # def init_ORB(self):
 #     self.orb = cv.ORB_create()
@@ -95,76 +96,76 @@ from sklearn.metrics import confusion_matrix
 #     # print(np.array(self.base).shape, self.test.shape)
 #     # print(self.match(np.array(self.base), self.test))
 #
-# def get_contour_bounding_rectangles(self, gray):
-#     """
-#       Getting all 2nd level bouding boxes based on contour detection algorithm.
-#     """
-#     contours, hierarchy = cv.findContours(gray, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-#     res = []
-#     for cnt in contours:
-#         (x, y, w, h) = cv.boundingRect(cnt)
-#         res.append((x, y, x + w, y + h))
-#     return res
+def get_contour_bounding_rectangles(self, gray):
+    """
+      Getting all 2nd level bouding boxes based on contour detection algorithm.
+    """
+    contours, hierarchy = cv.findContours(gray, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    res = []
+    for cnt in contours:
+        (x, y, w, h) = cv.boundingRect(cnt)
+        res.append((x, y, x + w, y + h))
+    return res
 #
-# def get_contour_bounding_rectangles_largest(self, gray):
-#     """
-#       Getting all 2nd level bouding boxes based on contour detection algorithm.
-#     """
-#     contours, hierarchy = cv.findContours(gray, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-#     areas = [cv.contourArea(c) for c in contours]
-#     max_index = np.argmax(areas)
-#     cnt = contours[max_index]
-#     self.cnt = cnt
-#     (x, y, w, h) = cv.boundingRect(cnt)
-#     # res = []
-#     # for cnt in contours:
-#     #     (x, y, w, h) = cv.boundingRect(cnt)
-#     #     res.append((x, y, x + w, y + h))
-#     return [(x, y, x + w, y + h)]
+def get_contour_bounding_rectangles_largest(gray):
+    """
+      Getting all 2nd level bouding boxes based on contour detection algorithm.
+    """
+    contours, hierarchy = cv.findContours(gray, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    areas = [cv.contourArea(c) for c in contours]
+    max_index = np.argmax(areas)
+    cnt = contours[max_index]
+    # self.cnt = cnt
+    (x, y, w, h) = cv.boundingRect(cnt)
+    # res = []
+    # for cnt in contours:
+    #     (x, y, w, h) = cv.boundingRect(cnt)
+    #     res.append((x, y, x + w, y + h))
+    return [(x, y, x + w, y + h)]
+
+def parse_img(img, sc, n_points):
+    # invert image colors
+    # img = cv.bitwise_not(img)
+    # _, img = cv.threshold(img, 128, 255, cv.THRESH_BINARY)
+    # making numbers fat for better contour detectiion
+    # kernel = np.ones((2, 2), np.uint8)
+    # img = cv.dilate(img, kernel, iterations=1)
+
+    # getting our numbers one by one
+    rois = get_contour_bounding_rectangles_largest(img)
+    # print(len(rois))
+    grayd = cv.cvtColor(img.copy(), cv.COLOR_GRAY2BGR)
+    nums = []
+    for r in rois:
+        grayd = cv.rectangle(grayd, (r[0], r[1]), (r[2], r[3]), (0, 255, 0), 1)
+        nums.append((r[0], r[1], r[2], r[3]))
+    # we are getting contours in different order so we need to sort them by x1
+    nums = sorted(nums, key=lambda x: x[0])
+    descs = []
+    for i, r in enumerate(nums):
+        if img[r[1]:r[3], r[0]:r[2]].mean() < 50:
+            continue
+        im = cv.resize(img[r[1]:r[3], r[0]:r[2]], (32 * 10, 24 * 10), interpolation=cv.INTER_CUBIC)
+        # blur = cv.GaussianBlur(im, (31, 31), 0)
+        # ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+        points = sc.get_points_from_img(img[r[1]:r[3], r[0]:r[2]], n_points)
+        # points = sc.get_points_from_img(im, n_points)
+        descriptor = sc.compute(points).flatten()
+        descs.append(descriptor)
+    # print(descs)
+    return np.array(descs[0])
 #
-# def parse_img(self, img):
-#     # invert image colors
-#     # img = cv.bitwise_not(img)
-#     # _, img = cv.threshold(img, 128, 255, cv.THRESH_BINARY)
-#     # making numbers fat for better contour detectiion
-#     # kernel = np.ones((2, 2), np.uint8)
-#     # img = cv.dilate(img, kernel, iterations=1)
 #
-#     # getting our numbers one by one
-#     rois = self.get_contour_bounding_rectangles_largest(img)
-#     # print(len(rois))
-#     grayd = cv.cvtColor(img.copy(), cv.COLOR_GRAY2BGR)
-#     nums = []
-#     for r in rois:
-#         grayd = cv.rectangle(grayd, (r[0], r[1]), (r[2], r[3]), (0, 255, 0), 1)
-#         nums.append((r[0], r[1], r[2], r[3]))
-#     # we are getting contours in different order so we need to sort them by x1
-#     nums = sorted(nums, key=lambda x: x[0])
-#     descs = []
-#     for i, r in enumerate(nums):
-#         if img[r[1]:r[3], r[0]:r[2]].mean() < 50:
-#             continue
-#         im = cv.resize(img[r[1]:r[3], r[0]:r[2]], self.fsize1, interpolation=cv.INTER_CUBIC)
-#         # blur = cv.GaussianBlur(im, (31, 31), 0)
-#         # ret, th = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-#         # points = self.sc.get_points_from_img(img[r[1]:r[3], r[0]:r[2]], 20)
-#         points = self.sc.get_points_from_img(im, self.n_points)
-#         descriptor = self.sc.compute(points).flatten()
-#         descs.append(descriptor)
-#     # print(descs)
-#     return np.array(descs[0])
-#
-#
-# def match(base, current):
-#     """
-#       Here we are using cosine diff instead of "by paper" diff, cause it's faster
-#     """
-#     res = cdist(base, current.reshape((1, current.shape[0])), metric="cosine")
-#     # res = cdist(base, current, metric="cosine")
-#
-#     idxmin = np.argmin(res.reshape(len(base)))
-#     result = sym_names[idxmin]
-#     return result, res.reshape(len(base))[idxmin]
+def match(base, current):
+    """
+      Here we are using cosine diff instead of "by paper" diff, cause it's faster
+    """
+    res = cdist(base, current.reshape((1, current.shape[0])), metric="cosine")
+    # res = cdist(base, current, metric="cosine")
+
+    idxmin = np.argmin(res.reshape(len(base)))
+    # result = sym_names[idxmin]
+    return idxmin, res.reshape(len(base))[idxmin]
 #
 # def init_ORB(self):
 #     self.orb = cv.ORB_create()
@@ -236,7 +237,10 @@ if __name__ == '__main__':
     search_params = dict(checks=50)
     flann_orb = cv.FlannBasedMatcher(index_params_orb, search_params)
     flann_surf = cv.DescriptorMatcher_create(cv.DescriptorMatcher_FLANNBASED)
-
+    base_sc = list()
+    symbols_sc = list()
+    sc = ShapeContext()
+    n_points = 100
     for filename in filenames:
         symbol = filename.split('.')[0]
         # if symbol not in symbol_set:
@@ -247,11 +251,11 @@ if __name__ == '__main__':
         _, imref = cv.threshold(imref, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
         kernel = np.ones((5, 5), np.uint8)
         imref = cv.morphologyEx(imref, cv.MORPH_CLOSE, kernel)
-        imrefs[symbol] = imref
-        orbrefs[symbol] = orb.detectAndCompute(imref, None)
-        # surfrefs[symbol] = surf.detectAndCompute(imref, None)
-        if orbrefs[symbol][1] is None:
-            print('Error! No ORB descriptor found for {}'.format(symbol))
+        # imrefs[symbol] = imref
+        # orbrefs[symbol] = orb.detectAndCompute(imref, None)
+        # # surfrefs[symbol] = surf.detectAndCompute(imref, None)
+        # if orbrefs[symbol][1] is None:
+        #     print('Error! No ORB descriptor found for {}'.format(symbol))
         # if surfrefs[symbol][1] is None:
         #     print('Error! No SURF descriptor found for {}'.format(symbol))
         # get contour
@@ -262,7 +266,11 @@ if __name__ == '__main__':
         max_index = np.argmax(areas)
         # print(areas[max_index], im.shape[0] * im.shape[1])
         cnt = contours[max_index]
+        (x, y, w, h) = cv.boundingRect(cnt)
         cntrefs[symbol] = cnt
+        #shape context
+        base_sc.append(parse_img(imref[y:y+h, x:x+w], sc, n_points))
+        symbols_sc.append(symbol)
         # cv.imshow(symbol, imref)
         # plt.show()
 
@@ -276,7 +284,7 @@ if __name__ == '__main__':
                 continue
             im = cv.imread(path + filename, cv.IMREAD_GRAYSCALE)
             # print(np.amax(im))
-            im[im < 0.2*255] = 0
+            im[im < 0.5*255] = 0
             im = cv.resize(im, fsize1, interpolation=cv.INTER_CUBIC)
             im = cv.flip(im, 0)
             im = cv.GaussianBlur(im, (31, 31), 0)
@@ -296,26 +304,30 @@ if __name__ == '__main__':
             (x, y, w, h) = cv.boundingRect(cnt)
             imt = im[y:y + h, x:x + w]
 
-            #orb shapematch
-            kpt, dest = orb.detectAndCompute(imt, None)
-            # kpt_surf, dest_surf = surf.detectAndCompute(imt, None)
-            if orbrefs[symbol][1] is None or dest is None:
-                continue
-            matches = bf.knnMatch(orbrefs[symbol][1], dest, k=2)
+            #shape context match
+            recognize = parse_img(imt, sc, n_points)
+            idxrec, res = match(base_sc, recognize)
+            print(symbol, symbols_sc[idxrec], res, len(recognize))
+            # #orb shapematch
+            # kpt, dest = orb.detectAndCompute(imt, None)
+            # # kpt_surf, dest_surf = surf.detectAndCompute(imt, None)
+            # if orbrefs[symbol][1] is None or dest is None:
+            #     continue
             # matches = bf.knnMatch(orbrefs[symbol][1], dest, k=2)
-            # matches = flann_surf.knnMatch(surfrefs[symbol][1], dest_surf, k=2)
-            if len(matches[0]) == 1:
-                continue
-            img3 = cv.drawMatchesKnn(imrefs[symbol], orbrefs[symbol][0], imt, kpt, matches, imt, flags=2)
-            if symbol in 'play':
-                plt.figure()
-                plt.imshow(img3)
-                plt.show()
-            good = list()
-            for (m,n) in matches:
-                if m.distance < 0.75*n.distance:
-                    good.append(m)
-            print(symbol, len(good))
+            # # matches = bf.knnMatch(orbrefs[symbol][1], dest, k=2)
+            # # matches = flann_surf.knnMatch(surfrefs[symbol][1], dest_surf, k=2)
+            # if len(matches[0]) == 1:
+            #     continue
+            # img3 = cv.drawMatchesKnn(imrefs[symbol], orbrefs[symbol][0], imt, kpt, matches, imt, flags=2)
+            # if symbol in 'play':
+            #     plt.figure()
+            #     plt.imshow(img3)
+            #     plt.show()
+            # good = list()
+            # for (m,n) in matches:
+            #     if m.distance < 0.75*n.distance:
+            #         good.append(m)
+            # print(symbol, len(good))
             # # hu's moments shapematch
             # dists = [cv.matchShapes(cnt, cntrefs[sym], cv.CONTOURS_MATCH_I1, 0) for sym in symbol_set]
             # idxmin = dists.index(min(dists))
