@@ -211,9 +211,9 @@ def colorscale(self, datas, minc, maxc):
 if __name__ == '__main__':
     # user_set = ['ztx', 'xxh', 'hn', 'xxw']
     # user_set = ['zx_big', 'ztx_big']
-    user_set = ['ztx_cover', 'zx_cover']
+    user_set = ['ztx_XL', 'zx_XL']
     # symbol_set = ['qus', 'light']
-    symbol_set = ['play', 'stop', 'qus', 'search', 'light']
+    symbol_set = ['play', 'stop', 'qus', 'star', 'plus', 'minus']
     fsize1 = (32 * 10, 24 * 10)
     hu_size = (20 * 10, 20 * 10)
     HuM_symbol = defaultdict(list)
@@ -309,11 +309,11 @@ if __name__ == '__main__':
             imt = im[y:y + h, x:x + w]
 
             #shape context match
-            recognize = parse_img(imt, sc, n_points)
-            X_sc.append(recognize)
-            Y_sc.append(symbol)
-            idxrec, res = match(base_sc, recognize)
-            print(symbol, symbols_sc[idxrec], res, len(recognize))
+            # recognize = parse_img(imt, sc, n_points)
+            # X_sc.append(recognize)
+            # Y_sc.append(symbol)
+            # idxrec, res = match(base_sc, recognize)
+            # print(symbol, symbols_sc[idxrec], res, len(recognize))
             # #orb shapematch
             # kpt, dest = orb.detectAndCompute(imt, None)
             # # kpt_surf, dest_surf = surf.detectAndCompute(imt, None)
@@ -334,10 +334,10 @@ if __name__ == '__main__':
             #     if m.distance < 0.75*n.distance:
             #         good.append(m)
             # print(symbol, len(good))
-            # # hu's moments shapematch
-            # dists = [cv.matchShapes(cnt, cntrefs[sym], cv.CONTOURS_MATCH_I1, 0) for sym in symbol_set]
-            # idxmin = dists.index(min(dists))
-            # print(symbol_set[idxmin], symbol, min(dists))
+            # hu's moments shapematch
+            dists = [cv.matchShapes(cnt, cntrefs[sym], cv.CONTOURS_MATCH_I2, 0) for sym in symbol_set]
+            idxmin = dists.index(min(dists))
+            print(symbol_set[idxmin], symbol, min(dists))
 
             # if (w * h) / (im.shape[0] * im.shape[1]) < 0.1:
             #     continue

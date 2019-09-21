@@ -66,7 +66,8 @@ def plot_confusion_matrix(y_true, y_pred, classes,
     fig.tight_layout()
     return ax
 
-user_set = ['txz2', 'zx2', 'dxy', 'cjn', 'hn', 'gtt']
+user_set = ['txz2', 'zx2', 'dxy', 'gtt', 'mth', 'hn', 'zjw', 'cjn']
+# user_set = ['dxy', 'cjn', 'hn', 'gtt', 'mth', 'yh', 'zjw', 'wzy']
 # symbol_set = ['back', 'cross', 'tick', 'ques', 'CA', 'two']
 symbol_set = ['ac', 'tv', 'l1', 'l2', 'k', 'p', 'a', 't', 'bs']
 classname = ['AC', 'TV', 'L1',  'L2', 'K', 'P', 'A', 'T', '$\leftarrow$']
@@ -102,6 +103,7 @@ for user in user_set:
             # print(max(amplitude), min(amplitude), np.mean(amplitude))
             # amp_hist = [[] for _ in range(n)]
             angle_hist = [[] for _ in range(n)]
+            # two parts
             angle_first = angle[:int(len(angle) / 2)]
             angle_second = angle[int(len(angle) / 2):]
             hist_first, avgf = np.histogram(angle_first, n, range=(-180, 180), density=False)
@@ -109,7 +111,24 @@ for user in user_set:
             hist, avg = np.histogram(angle, n, range=(-180, 180), density=False)
             x_first = hist_first / np.sum(hist_first)
             x_second = hist_second/np.sum(hist_second)
-            x = hist / np.sum(hist)
+
+            # three parts
+            # angle_first = angle[:int(len(angle) / 3)]
+            # angle_second = angle[int(len(angle) / 3):int(len(angle) * 2 / 3)]
+            # angle_third = angle[int(len(angle) * 2 / 3):]
+            #
+            # hist_first, avgf = np.histogram(angle_first, n, range=(-180, 180), density=False)
+            # hist_second, avgs = np.histogram(angle_second, n, range=(-180, 180), density=False)
+            # hist_third, avgt = np.histogram(angle_third, n, range=(-180, 180), density=False)
+            # hist, avg = np.histogram(angle, n, range=(-180, 180), density=False)
+            # if np.sum(hist_first) == 0 or np.sum(hist_second) == 0 or np.sum(hist_third) == 0:
+            #     continue
+            # x_first = hist_first / np.sum(hist_first)
+            # x_second = hist_second / np.sum(hist_second)
+            # x_third = hist_third / np.sum(hist_third)
+            # x = hist / np.sum(hist)
+
+            # amplitude
             amp_hist = [0 for _ in hist]
             amp_second_hist = [0 for _ in hist]
             amp_first_hist = [0 for _ in hist]
@@ -210,11 +229,11 @@ clf_svm = svm.SVC(kernel='rbf', C=1.0, gamma='scale')
 scores = cross_val_score(clf_svm, X_total, Y_total, cv=cv)
 print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores, scores.mean(), scores.std() * 2))
 
-# clf_rf = RandomForestClassifier(n_estimators=3000, max_depth=9, random_state=0)
+# clf_rf = RandomForestClassifier(n_estimators=2000, max_depth=11, random_state=0)
 # # clf_rf.fit(X, Y)
 # scores_rf = cross_val_score(clf_rf, X_total, Y_total, cv=cv)
 # print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_rf, scores_rf.mean(), scores_rf.std() * 2))
-#
+
 # clf_gb = GradientBoostingClassifier()
 # scores_gb = cross_val_score(clf_gb, X_total, Y_total, cv=cv)
 # print("{0} Accuracy: {1:.2f} (+/- {2:.2f})".format(scores_gb, scores_gb.mean(), scores_gb.std() * 2))
@@ -240,7 +259,7 @@ for i in range(len(X_uset)):
 print('Averaged within user accuracy is {}, std is {}'.format(np.mean(acc_within), np.std(acc_within)))
 df_cm = pd.DataFrame(acc_matrix/len(user_set), classname, classname)
 sn.set(font_scale=1.4)
-sn.heatmap(df_cm, annot=True, annot_kws={'size':14}, fmt='.2f', cmap="YlGnBu")
+sn.heatmap(df_cm*100, annot=True, annot_kws={'size':14}, fmt='.1f', cmap="YlGnBu")
 plt.show()
 
 # between user accuracy
@@ -271,7 +290,9 @@ print('Averaged between user accuracy is {}, std is {}'.format(np.mean(acc_betwe
 print('Averaged between user confusion matrix is {}'.format(acc_matrix/len(user_set)))
 df_cm = pd.DataFrame(acc_matrix/len(user_set), classname, classname)
 sn.set(font_scale=1.4)
-sn.heatmap(df_cm, annot=True, annot_kws={'size':14}, fmt='.2f', cmap="YlGnBu")
+g = sn.heatmap(df_cm*100, annot=True, annot_kws={'size':14}, fmt='.1f', cmap="YlGnBu")
+# g.set_yticklabels(g.get_yticklabels(), rotation=90)
+# plt.setp(g.get_yticklabels(), rotation=90)
 plt.show()
 
 
